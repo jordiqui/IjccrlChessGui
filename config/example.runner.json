@@ -1,0 +1,46 @@
+{
+  "engines": [
+    {
+      "name": "EngineA",
+      "cmd": "C:/engines/engineA.exe",
+      "args": [],
+      "uci_options": {
+        "Threads": 1,
+        "Hash": 256
+      }
+    },
+    {
+      "name": "EngineB",
+      "cmd": "C:/engines/engineB.exe",
+      "args": [],
+      "uci_options": {
+        "Threads": 1,
+        "Hash": 256
+      }
+    }
+  ],
+  "tournament": {
+    "mode": "round_robin",
+    "double_round_robin": false
+  },
+  "time_control": {
+    "base_seconds": 60,
+    "increment_seconds": 1
+  },
+  "openings": {
+    "type": "epd",
+    "path": "C:/openings/suite.epd",
+    "policy": "sequential",
+    "seed": 12345
+  },
+  "output": {
+    "directory": "out",
+    "tournament_pgn": "out/tournament.pgn",
+    "live_pgn": "out/live.pgn",
+    "results_json": "out/results.json"
+  },
+  "broadcast": {
+    "adapter": "tlcs_ini",
+    "server_ini": "C:/WinBoard-4.4.0/PSWBTM/server.ini"
+  }
+}
