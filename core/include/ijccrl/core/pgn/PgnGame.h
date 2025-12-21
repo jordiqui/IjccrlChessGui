@@ -15,6 +15,7 @@ struct PgnGame {
     std::vector<PgnTag> tags;
     std::vector<std::string> moves;
     std::string result = "*";
+    std::string termination_comment;
 
     void SetTag(const std::string& key, const std::string& value) {
         for (auto& tag : tags) {

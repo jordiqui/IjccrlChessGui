@@ -27,6 +27,8 @@ private:
     QLabel* black_label_ = nullptr;
     QLabel* opening_label_ = nullptr;
     QLabel* last_move_label_ = nullptr;
+    QLabel* termination_label_ = nullptr;
+    QLabel* tablebase_label_ = nullptr;
     QLabel* live_pgn_label_ = nullptr;
     QLabel* tlcs_label_ = nullptr;
     QListWidget* pairings_list_ = nullptr;

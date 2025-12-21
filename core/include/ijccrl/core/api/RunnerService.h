@@ -23,6 +23,8 @@ struct RunnerState {
     std::string lastMove;
     std::string fen;
     std::string openingId;
+    std::string terminationReason;
+    bool tablebaseUsed = false;
     std::string livePgnPath;
     std::string tourneyPgnPath;
     int concurrency = 1;

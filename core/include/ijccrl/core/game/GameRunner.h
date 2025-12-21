@@ -3,6 +3,7 @@
 #include "ijccrl/core/game/GameState.h"
 #include "ijccrl/core/game/TimeControl.h"
 #include "ijccrl/core/pgn/PgnGame.h"
+#include "ijccrl/core/rules/Termination.h"
 #include "ijccrl/core/uci/UciEngine.h"
 
 #include <atomic>
@@ -24,7 +25,7 @@ public:
     Result PlayGame(ijccrl::core::uci::UciEngine& white,
                     ijccrl::core::uci::UciEngine& black,
                     const TimeControl& time_control,
-                    int max_plies,
+                    const ijccrl::core::rules::ConfigLimits& termination_limits,
                     int go_timeout_ms,
                     const std::atomic<bool>* stop_requested,
                     ijccrl::core::pgn::PgnGame pgn_template,

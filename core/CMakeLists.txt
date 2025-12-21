@@ -13,6 +13,7 @@ add_library(ijccrlcore
     src/process/Process.cpp
     src/runtime/EnginePool.cpp
     src/runtime/MatchRunner.cpp
+    src/rules/Termination.cpp
     src/stats/StandingsTable.cpp
     src/tournament/RoundRobinScheduler.cpp
     src/tournament/SwissScheduler.cpp

@@ -14,6 +14,8 @@ LiveGamePanel::LiveGamePanel(QWidget* parent)
     black_label_ = new QLabel("Black: -", this);
     opening_label_ = new QLabel("Opening: -", this);
     last_move_label_ = new QLabel("Last move: -", this);
+    termination_label_ = new QLabel("Termination: -", this);
+    tablebase_label_ = new QLabel("TB used: -", this);
     live_pgn_label_ = new QLabel("Live PGN: -", this);
     tlcs_label_ = new QLabel("TLCS mode: -", this);
     pairings_list_ = new QListWidget(this);
@@ -28,6 +30,8 @@ LiveGamePanel::LiveGamePanel(QWidget* parent)
     layout->addWidget(black_label_);
     layout->addWidget(opening_label_);
     layout->addWidget(last_move_label_);
+    layout->addWidget(termination_label_);
+    layout->addWidget(tablebase_label_);
     layout->addWidget(new QLabel("Current round pairings:", this));
     layout->addWidget(pairings_list_);
 
@@ -53,6 +57,11 @@ void LiveGamePanel::updateState(const ijccrl::core::api::RunnerState& state, boo
     black_label_->setText(QString("Black: %1").arg(QString::fromStdString(state.blackName)));
     opening_label_->setText(QString("Opening: %1").arg(QString::fromStdString(state.openingId)));
     last_move_label_->setText(QString("Last move: %1").arg(QString::fromStdString(state.lastMove)));
+    termination_label_->setText(QString("Termination: %1")
+                                    .arg(state.terminationReason.empty()
+                                             ? QString("-")
+                                             : QString::fromStdString(state.terminationReason)));
+    tablebase_label_->setText(QString("TB used: %1").arg(state.tablebaseUsed ? "yes" : "-"));
     live_pgn_label_->setText(QString("Live PGN: %1").arg(live_pgn_path_));
     if (tlcs_enabled) {
         tlcs_label_->setText("TLCS mode: writing TOURNEYPGN");

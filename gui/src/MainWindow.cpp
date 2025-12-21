@@ -200,6 +200,55 @@ void MainWindow::createUi() {
         }
     });
 
+    adjudication_enabled_ = new QCheckBox("Enable adjudication", setup_tab);
+    adjudication_enabled_->setChecked(true);
+    adjudication_draw_cp_ = new QSpinBox(setup_tab);
+    adjudication_draw_cp_->setRange(0, 1000);
+    adjudication_draw_cp_->setValue(15);
+    adjudication_draw_moves_ = new QSpinBox(setup_tab);
+    adjudication_draw_moves_->setRange(1, 50);
+    adjudication_draw_moves_->setValue(8);
+    adjudication_win_cp_ = new QSpinBox(setup_tab);
+    adjudication_win_cp_->setRange(0, 5000);
+    adjudication_win_cp_->setValue(700);
+    adjudication_win_moves_ = new QSpinBox(setup_tab);
+    adjudication_win_moves_->setRange(1, 50);
+    adjudication_win_moves_->setValue(6);
+    adjudication_min_depth_ = new QSpinBox(setup_tab);
+    adjudication_min_depth_->setRange(1, 99);
+    adjudication_min_depth_->setValue(12);
+
+    resign_enabled_ = new QCheckBox("Enable resign", setup_tab);
+    resign_enabled_->setChecked(true);
+    resign_cp_ = new QSpinBox(setup_tab);
+    resign_cp_->setRange(0, 5000);
+    resign_cp_->setValue(900);
+    resign_moves_ = new QSpinBox(setup_tab);
+    resign_moves_->setRange(1, 50);
+    resign_moves_->setValue(3);
+    resign_min_depth_ = new QSpinBox(setup_tab);
+    resign_min_depth_->setRange(1, 99);
+    resign_min_depth_->setValue(12);
+
+    tablebase_enabled_ = new QCheckBox("Enable tablebases", setup_tab);
+    tablebase_enabled_->setChecked(true);
+    tablebase_paths_ = new QLineEdit(setup_tab);
+    auto* tablebase_browse = new QPushButton("Add path", setup_tab);
+    connect(tablebase_browse, &QPushButton::clicked, [this]() {
+        const auto path = QFileDialog::getExistingDirectory(this, "Select Syzygy path", "");
+        if (!path.isEmpty()) {
+            const auto existing = tablebase_paths_->text();
+            if (existing.isEmpty()) {
+                tablebase_paths_->setText(path);
+            } else {
+                tablebase_paths_->setText(existing + ";" + path);
+            }
+        }
+    });
+    tablebase_piece_limit_ = new QSpinBox(setup_tab);
+    tablebase_piece_limit_->setRange(3, 7);
+    tablebase_piece_limit_->setValue(6);
+
     auto* openings_path_row = new QHBoxLayout();
     openings_path_row->addWidget(openings_path_, 1);
     openings_path_row->addWidget(openings_browse);
@@ -211,6 +260,10 @@ void MainWindow::createUi() {
     auto* output_row = new QHBoxLayout();
     output_row->addWidget(output_dir_edit_, 1);
     output_row->addWidget(output_browse);
+
+    auto* tablebase_row = new QHBoxLayout();
+    tablebase_row->addWidget(tablebase_paths_, 1);
+    tablebase_row->addWidget(tablebase_browse);
 
     options_layout->addRow("Tournament mode", tournament_mode_);
     options_layout->addRow("Double RR", double_rr_);
@@ -227,6 +280,19 @@ void MainWindow::createUi() {
     options_layout->addRow("Openings seed", openings_seed_);
     options_layout->addRow("TLCS server.ini", server_row);
     options_layout->addRow("Output dir", output_row);
+    options_layout->addRow("", adjudication_enabled_);
+    options_layout->addRow("Adj draw cp", adjudication_draw_cp_);
+    options_layout->addRow("Adj draw moves", adjudication_draw_moves_);
+    options_layout->addRow("Adj win cp", adjudication_win_cp_);
+    options_layout->addRow("Adj win moves", adjudication_win_moves_);
+    options_layout->addRow("Adj min depth", adjudication_min_depth_);
+    options_layout->addRow("", resign_enabled_);
+    options_layout->addRow("Resign cp", resign_cp_);
+    options_layout->addRow("Resign moves", resign_moves_);
+    options_layout->addRow("Resign min depth", resign_min_depth_);
+    options_layout->addRow("", tablebase_enabled_);
+    options_layout->addRow("TB paths", tablebase_row);
+    options_layout->addRow("TB max pieces", tablebase_piece_limit_);
 
     setup_layout->addLayout(options_layout);
     setup_layout->addStretch(1);
@@ -649,6 +715,25 @@ ijccrl::core::api::RunnerConfig MainWindow::buildConfigFromUi() const {
         config.broadcast.server_ini = server_ini_path_->text().toStdString();
     }
 
+    config.adjudication.enabled = adjudication_enabled_->isChecked();
+    config.adjudication.score_draw_cp = adjudication_draw_cp_->value();
+    config.adjudication.score_draw_moves = adjudication_draw_moves_->value();
+    config.adjudication.score_win_cp = adjudication_win_cp_->value();
+    config.adjudication.score_win_moves = adjudication_win_moves_->value();
+    config.adjudication.min_depth = adjudication_min_depth_->value();
+
+    config.resign.enabled = resign_enabled_->isChecked();
+    config.resign.cp = resign_cp_->value();
+    config.resign.moves = resign_moves_->value();
+    config.resign.min_depth = resign_min_depth_->value();
+
+    config.tablebases.enabled = tablebase_enabled_->isChecked();
+    config.tablebases.paths.clear();
+    for (const auto& path : SplitOptions(tablebase_paths_->text())) {
+        config.tablebases.paths.push_back(path.trimmed().toStdString());
+    }
+    config.tablebases.probe_limit_pieces = tablebase_piece_limit_->value();
+
     return config;
 }
 
@@ -706,6 +791,23 @@ void MainWindow::applyConfigToUi(const ijccrl::core::api::RunnerConfig& config) 
     openings_seed_->setValue(config.openings.seed);
 
     server_ini_path_->setText(QString::fromStdString(config.broadcast.server_ini));
+    adjudication_enabled_->setChecked(config.adjudication.enabled);
+    adjudication_draw_cp_->setValue(config.adjudication.score_draw_cp);
+    adjudication_draw_moves_->setValue(config.adjudication.score_draw_moves);
+    adjudication_win_cp_->setValue(config.adjudication.score_win_cp);
+    adjudication_win_moves_->setValue(config.adjudication.score_win_moves);
+    adjudication_min_depth_->setValue(config.adjudication.min_depth);
+    resign_enabled_->setChecked(config.resign.enabled);
+    resign_cp_->setValue(config.resign.cp);
+    resign_moves_->setValue(config.resign.moves);
+    resign_min_depth_->setValue(config.resign.min_depth);
+    tablebase_enabled_->setChecked(config.tablebases.enabled);
+    QStringList tb_paths;
+    for (const auto& path : config.tablebases.paths) {
+        tb_paths << QString::fromStdString(path);
+    }
+    tablebase_paths_->setText(tb_paths.join(";"));
+    tablebase_piece_limit_->setValue(config.tablebases.probe_limit_pieces);
 
     const QFileInfo out_info(QString::fromStdString(config.output.tournament_pgn));
     output_dir_ = out_info.dir().path();

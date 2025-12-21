@@ -46,7 +46,7 @@ public:
 
     MatchRunner(EnginePool& pool,
                 ijccrl::core::game::TimeControl time_control,
-                int max_plies,
+                ijccrl::core::rules::ConfigLimits termination_limits,
                 int go_timeout_ms,
                 bool abort_on_stop,
                 int max_failures,
@@ -70,7 +70,7 @@ private:
 
     EnginePool& pool_;
     ijccrl::core::game::TimeControl time_control_;
-    int max_plies_ = 0;
+    ijccrl::core::rules::ConfigLimits termination_limits_{};
     int go_timeout_ms_ = 0;
     bool abort_on_stop_ = true;
     int max_failures_ = 0;

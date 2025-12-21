@@ -124,6 +124,7 @@ bool UciEngine::Go(int wtime_ms,
                    int timeout_ms,
                    std::string& bestmove) {
     last_failure_ = Failure::None;
+    last_info_ = Info{};
     std::ostringstream command;
     command << "go";
     command << " wtime " << wtime_ms;
@@ -155,6 +156,51 @@ bool UciEngine::Go(int wtime_ms,
             continue;
         }
 
+        if (line.rfind("info ", 0) == 0) {
+            std::istringstream iss(line);
+            std::string token;
+            iss >> token;  // info
+            while (iss >> token) {
+                if (token == "score") {
+                    std::string type;
+                    if (!(iss >> type)) {
+                        break;
+                    }
+                    if (type == "cp") {
+                        int score = 0;
+                        if (iss >> score) {
+                            last_info_.has_score_cp = true;
+                            last_info_.score_cp = score;
+                            last_info_.has_score_mate = false;
+                        }
+                    } else if (type == "mate") {
+                        int mate = 0;
+                        if (iss >> mate) {
+                            last_info_.has_score_mate = true;
+                            last_info_.score_mate = mate;
+                            last_info_.has_score_cp = false;
+                        }
+                    }
+                } else if (token == "depth") {
+                    int depth = 0;
+                    if (iss >> depth) {
+                        last_info_.depth = depth;
+                    }
+                } else if (token == "nodes") {
+                    long long nodes = 0;
+                    if (iss >> nodes) {
+                        last_info_.nodes = nodes;
+                    }
+                } else if (token == "nps") {
+                    long long nps = 0;
+                    if (iss >> nps) {
+                        last_info_.nps = nps;
+                    }
+                }
+            }
+            continue;
+        }
+
         if (line.rfind("bestmove ", 0) == 0) {
             std::istringstream iss(line);
             std::string token;
@@ -163,7 +209,7 @@ bool UciEngine::Go(int wtime_ms,
             if (bestmove == "(none)") {
                 bestmove.clear();
                 last_failure_ = Failure::NoBestmove;
-                return false;
+                return true;
             }
             return true;
         }
