@@ -34,6 +34,10 @@ class MatchRunner {
 public:
     using ResultCallback = std::function<void(const MatchResult&)>;
     using LiveUpdateFn = ijccrl::core::game::GameRunner::LiveUpdateFn;
+    using MoveUpdateFn = std::function<void(const MatchJob&,
+                                            int game_number,
+                                            const std::string&,
+                                            const std::string&)>;
     using JobEventFn = std::function<void(const MatchJob&, int game_number, bool started)>;
     using WatchdogLogFn = std::function<void(const std::string&)>;
 
@@ -54,6 +58,7 @@ public:
                 bool pause_on_unhealthy,
                 ResultCallback result_callback,
                 LiveUpdateFn live_update,
+                MoveUpdateFn move_update,
                 WatchdogLogFn watchdog_log,
                 JobEventFn job_event = {});
 
@@ -81,6 +86,7 @@ private:
     bool pause_on_unhealthy_ = false;
     ResultCallback result_callback_;
     LiveUpdateFn live_update_;
+    MoveUpdateFn move_update_;
     WatchdogLogFn watchdog_log_;
     JobEventFn job_event_;
     std::vector<std::deque<int>> failure_history_{};

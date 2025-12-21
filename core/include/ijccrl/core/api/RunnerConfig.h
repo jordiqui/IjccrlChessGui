@@ -50,6 +50,13 @@ struct OutputConfig {
 struct BroadcastConfig {
     std::string adapter;
     std::string server_ini;
+    struct TlcsConfig {
+        std::string server_ini;
+        std::string feed_path;
+        bool auto_write_server_ini = false;
+        std::string tlcs_exe;
+        bool autostart = false;
+    } tlcs;
 };
 
 struct TimeControlConfig {

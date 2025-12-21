@@ -40,7 +40,8 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
                                         ijccrl::core::pgn::PgnGame pgn_template,
                                         const std::string& initial_fen,
                                         const std::vector<std::string>& opening_moves,
-                                        const LiveUpdateFn& live_update) {
+                                        const LiveUpdateFn& live_update,
+                                        const MoveUpdateFn& move_update) {
     Result result;
     result.state.wtime_ms = time_control.base_ms;
     result.state.btime_ms = time_control.base_ms;
@@ -72,10 +73,17 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
 
     const std::string position_fen = IsStartposFen(initial_fen) ? "" : initial_fen;
     ijccrl::core::rules::GameTerminator terminator(position_fen,
-                                                   opening_moves,
+                                                   {},
                                                    termination_limits,
                                                    termination_limits.tablebases);
     ijccrl::core::rules::EngineInfos engine_infos;
+
+    for (const auto& move : opening_moves) {
+        terminator.ApplyMove(move);
+        if (move_update) {
+            move_update(move, terminator.CurrentFen());
+        }
+    }
 
     auto update_eval = [&](ijccrl::core::uci::UciEngine& engine,
                            Side engine_side) {
@@ -174,6 +182,9 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
         result.state.moves_uci.push_back(bestmove);
         update_eval(engine, result.state.side_to_move);
         terminator.ApplyMove(bestmove);
+        if (move_update) {
+            move_update(bestmove, terminator.CurrentFen());
+        }
 
         if (result.state.side_to_move == Side::White) {
             result.state.wtime_ms -= movetime_ms;
@@ -208,6 +219,7 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
         termination_reason = ijccrl::core::rules::TerminationReason::MaxPlies;
     }
 
+    result.final_fen = terminator.CurrentFen();
     result.pgn.SetTag("Result", result.state.result);
     if (termination_reason.has_value()) {
         result.pgn.SetTag("Termination",

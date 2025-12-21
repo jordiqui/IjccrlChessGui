@@ -41,6 +41,13 @@
   },
   "broadcast": {
     "adapter": "tlcs_ini",
-    "server_ini": "C:/WinBoard-4.4.0/PSWBTM/server.ini"
+    "server_ini": "C:/WinBoard-4.4.0/PSWBTM/server.ini",
+    "tlcs": {
+      "server_ini": "C:/IjccrlChessGui/runtime/tlcs/server.ini",
+      "feed_path": "C:/IjccrlChessGui/runtime/tlcs/TLCV_File.txt",
+      "auto_write_server_ini": true,
+      "tlcs_exe": "C:/TLCS/tlc_server16a.exe",
+      "autostart": false
+    }
   }
 }

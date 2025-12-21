@@ -99,6 +99,7 @@ public:
 
     void ApplyMove(const std::string& move_uci);
     ProbeInfo BuildProbeInfo() const;
+    std::string CurrentFen() const;
     TerminationOutcome ShouldEnd(const ijccrl::core::game::GameState& state,
                                  const EngineInfos& infos,
                                  const ProbeInfo& probe,

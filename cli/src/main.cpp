@@ -1,3 +1,4 @@
+#include "ijccrl/core/broadcast/TlcsFeedAdapter.h"
 #include "ijccrl/core/broadcast/TlcsIniAdapter.h"
 #include "ijccrl/core/api/RunnerConfig.h"
 #include "ijccrl/core/export/ExportWriter.h"
@@ -173,7 +174,8 @@ int main(int argc, char** argv) {
     const auto& opening_config = runner_config.openings;
     const auto& output_config = runner_config.output;
 
-    std::unique_ptr<ijccrl::core::broadcast::IBroadcastAdapter> adapter;
+    std::unique_ptr<ijccrl::core::broadcast::IBroadcastAdapter> pgn_adapter;
+    std::unique_ptr<ijccrl::core::broadcast::TlcsFeedAdapter> feed_adapter;
     std::string site_tag;
 
     if (runner_config.broadcast.adapter == "tlcs_ini") {
@@ -184,10 +186,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         site_tag = tlcs->site();
-        adapter = std::move(tlcs);
+        pgn_adapter = std::move(tlcs);
+    } else if (runner_config.broadcast.adapter == "tlcs_feed") {
+        ijccrl::core::broadcast::TlcsFeedAdapter::Config tlcs_config;
+        tlcs_config.server_ini = runner_config.broadcast.tlcs.server_ini;
+        tlcs_config.feed_path = runner_config.broadcast.tlcs.feed_path;
+        tlcs_config.auto_write_server_ini = runner_config.broadcast.tlcs.auto_write_server_ini;
+        auto tlcs = std::make_unique<ijccrl::core::broadcast::TlcsFeedAdapter>();
+        if (!tlcs->Configure(tlcs_config)) {
+            std::cerr << "[ijccrlcli] Failed to configure TLCS feed adapter." << '\n';
+            return 1;
+        }
+        site_tag = tlcs->site();
+        feed_adapter = std::move(tlcs);
     }
 
-    if (!adapter) {
+    if (!pgn_adapter && !feed_adapter) {
         std::cerr << "[ijccrlcli] No broadcast adapter configured." << '\n';
         return 1;
     }
@@ -390,8 +404,8 @@ int main(int argc, char** argv) {
 
         const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
             const std::string live_pgn = ijccrl::core::pgn::PgnWriter::Render(live_game);
-            if (adapter) {
-                adapter->PublishLivePgn(live_pgn);
+            if (pgn_adapter) {
+                pgn_adapter->PublishLivePgn(live_pgn);
             }
             if (!WriteLivePgn(output_config.live_pgn, live_pgn)) {
                 disk_write_errors.fetch_add(1);
@@ -402,6 +416,18 @@ int main(int argc, char** argv) {
                                       int game_number,
                                       bool started) {
             if (started) {
+                if (feed_adapter) {
+                    ijccrl::core::broadcast::GameInfo info;
+                    info.white = engine_names[static_cast<size_t>(job.fixture.white_engine_id)];
+                    info.black = engine_names[static_cast<size_t>(job.fixture.black_engine_id)];
+                    info.event = job.event_name;
+                    info.site = site_tag;
+                    info.round = job.round_label;
+                    const std::string initial_fen = job.opening.fen.empty()
+                                                        ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                                                        : job.opening.fen;
+                    feed_adapter->OnGameStart(info, initial_fen);
+                }
                 active_games.fetch_add(1);
                 std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
                 ijccrl::core::persist::ActiveGameMeta active;
@@ -423,10 +449,25 @@ int main(int argc, char** argv) {
             }
         };
 
+        const auto move_update = [&](const ijccrl::core::runtime::MatchJob&,
+                                     int,
+                                     const std::string& move_uci,
+                                     const std::string& fen_after_move) {
+            if (feed_adapter) {
+                feed_adapter->OnMove(move_uci, fen_after_move);
+            }
+        };
+
         std::function<void()> write_checkpoint;
         const auto on_result = [&](const ijccrl::core::runtime::MatchResult& result) {
             const auto& fixture = result.job.fixture;
             const std::string final_pgn = ijccrl::core::pgn::PgnWriter::Render(result.result.pgn);
+            if (feed_adapter) {
+                ijccrl::core::broadcast::GameResult game_result;
+                game_result.result = result.result.state.result;
+                game_result.termination = result.result.state.termination;
+                feed_adapter->OnGameEnd(game_result, result.result.final_fen);
+            }
             long long pgn_offset = 0;
             {
                 const std::filesystem::path fs_path(output_config.tournament_pgn);
@@ -708,6 +749,7 @@ int main(int argc, char** argv) {
                                                         runner_config.watchdog.pause_on_unhealthy,
                                                         on_result,
                                                         live_update,
+                                                        move_update,
                                                         watchdog_log,
                                                         on_job_event);
 
@@ -902,8 +944,8 @@ int main(int argc, char** argv) {
 
     const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
         const std::string live_pgn = ijccrl::core::pgn::PgnWriter::Render(live_game);
-        if (adapter) {
-            adapter->PublishLivePgn(live_pgn);
+        if (pgn_adapter) {
+            pgn_adapter->PublishLivePgn(live_pgn);
         }
         if (!WriteLivePgn(output_config.live_pgn, live_pgn)) {
             disk_write_errors.fetch_add(1);
@@ -914,6 +956,12 @@ int main(int argc, char** argv) {
     const auto on_result = [&](const ijccrl::core::runtime::MatchResult& result) {
         const auto& fixture = result.job.fixture;
         const std::string final_pgn = ijccrl::core::pgn::PgnWriter::Render(result.result.pgn);
+        if (feed_adapter) {
+            ijccrl::core::broadcast::GameResult game_result;
+            game_result.result = result.result.state.result;
+            game_result.termination = result.result.state.termination;
+            feed_adapter->OnGameEnd(game_result, result.result.final_fen);
+        }
         long long pgn_offset = 0;
         {
             const std::filesystem::path fs_path(output_config.tournament_pgn);
@@ -1038,6 +1086,18 @@ int main(int argc, char** argv) {
                                   int game_number,
                                   bool started) {
         if (started) {
+            if (feed_adapter) {
+                ijccrl::core::broadcast::GameInfo info;
+                info.white = engine_names[static_cast<size_t>(job.fixture.white_engine_id)];
+                info.black = engine_names[static_cast<size_t>(job.fixture.black_engine_id)];
+                info.event = job.event_name;
+                info.site = site_tag;
+                info.round = job.round_label;
+                const std::string initial_fen = job.opening.fen.empty()
+                                                    ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                                                    : job.opening.fen;
+                feed_adapter->OnGameStart(info, initial_fen);
+            }
             active_games.fetch_add(1);
             std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
             ijccrl::core::persist::ActiveGameMeta active;
@@ -1056,6 +1116,15 @@ int main(int argc, char** argv) {
                                                        return entry.game_no == game_number;
                                                    }),
                                     active_games_meta.end());
+        }
+    };
+
+    const auto move_update = [&](const ijccrl::core::runtime::MatchJob&,
+                                 int,
+                                 const std::string& move_uci,
+                                 const std::string& fen_after_move) {
+        if (feed_adapter) {
+            feed_adapter->OnMove(move_uci, fen_after_move);
         }
     };
 
@@ -1183,6 +1252,7 @@ int main(int argc, char** argv) {
                                                     runner_config.watchdog.pause_on_unhealthy,
                                                     on_result,
                                                     live_update,
+                                                    move_update,
                                                     [](const std::string& line) { std::cout << line << '\n'; },
                                                     on_job_event);
     write_checkpoint();

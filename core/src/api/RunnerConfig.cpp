@@ -153,6 +153,15 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
         const auto& broadcast = root.at("broadcast");
         config.broadcast.adapter = broadcast.value("adapter", config.broadcast.adapter);
         config.broadcast.server_ini = broadcast.value("server_ini", config.broadcast.server_ini);
+        if (broadcast.contains("tlcs")) {
+            const auto& tlcs = broadcast.at("tlcs");
+            config.broadcast.tlcs.server_ini = tlcs.value("server_ini", config.broadcast.tlcs.server_ini);
+            config.broadcast.tlcs.feed_path = tlcs.value("feed_path", config.broadcast.tlcs.feed_path);
+            config.broadcast.tlcs.auto_write_server_ini =
+                tlcs.value("auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini);
+            config.broadcast.tlcs.tlcs_exe = tlcs.value("tlcs_exe", config.broadcast.tlcs.tlcs_exe);
+            config.broadcast.tlcs.autostart = tlcs.value("autostart", config.broadcast.tlcs.autostart);
+        }
     }
 
     if (root.contains("limits")) {
@@ -264,6 +273,14 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
     root["broadcast"] = {
         {"adapter", config.broadcast.adapter},
         {"server_ini", config.broadcast.server_ini},
+        {"tlcs",
+         {
+             {"server_ini", config.broadcast.tlcs.server_ini},
+             {"feed_path", config.broadcast.tlcs.feed_path},
+             {"auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini},
+             {"tlcs_exe", config.broadcast.tlcs.tlcs_exe},
+             {"autostart", config.broadcast.tlcs.autostart},
+         }},
     };
 
     root["limits"] = {
@@ -365,6 +382,14 @@ std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
     root["broadcast"] = {
         {"adapter", config.broadcast.adapter},
         {"server_ini", config.broadcast.server_ini},
+        {"tlcs",
+         {
+             {"server_ini", config.broadcast.tlcs.server_ini},
+             {"feed_path", config.broadcast.tlcs.feed_path},
+             {"auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini},
+             {"tlcs_exe", config.broadcast.tlcs.tlcs_exe},
+             {"autostart", config.broadcast.tlcs.autostart},
+         }},
     };
     root["limits"] = {
         {"max_plies", config.limits.max_plies},
