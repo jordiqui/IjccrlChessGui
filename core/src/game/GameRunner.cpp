@@ -24,6 +24,10 @@ std::string CurrentDateUtc() {
     return out.str();
 }
 
+bool IsStartposFen(const std::string& fen) {
+    return fen == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
 }  // namespace
 
 GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
@@ -31,12 +35,18 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
                                         const TimeControl& time_control,
                                         int max_plies,
                                         ijccrl::core::pgn::PgnGame pgn_template,
+                                        const std::string& initial_fen,
+                                        const std::vector<std::string>& opening_moves,
                                         const LiveUpdateFn& live_update) {
     Result result;
     result.state.wtime_ms = time_control.base_ms;
     result.state.btime_ms = time_control.base_ms;
     result.state.winc_ms = time_control.increment_ms;
     result.state.binc_ms = time_control.increment_ms;
+    result.state.moves_uci = opening_moves;
+    if (opening_moves.size() % 2 == 1) {
+        result.state.side_to_move = Side::Black;
+    }
 
     result.pgn = std::move(pgn_template);
     result.pgn.SetTag("Date", CurrentDateUtc());
@@ -49,6 +59,8 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
         }
     };
 
+    const std::string position_fen = IsStartposFen(initial_fen) ? "" : initial_fen;
+
     for (int ply = 0; ply < max_plies; ++ply) {
         auto& engine = (result.state.side_to_move == Side::White) ? white : black;
 
@@ -58,7 +70,7 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
             break;
         }
 
-        engine.Position("", result.state.moves_uci);
+        engine.Position(position_fen, result.state.moves_uci);
 
         const int movetime_ms = time_control.move_time_ms;
         const int timeout_ms = movetime_ms + 5000;
