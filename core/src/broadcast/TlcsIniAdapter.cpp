@@ -1,13 +1,11 @@
 #include "ijccrl/core/broadcast/TlcsIniAdapter.h"
 
+#include "ijccrl/core/util/AtomicFileWriter.h"
+
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace ijccrl::core::broadcast {
 
@@ -30,13 +28,10 @@ bool TlcsIniAdapter::Configure(const std::string& config_path) {
         return false;
     }
 
-    std::cout << "[tlcs] Configured TLCS adapter" << '\n'
-              << "  server.ini: " << server_ini_path_ << '\n'
-              << "  TOURNEYPGN: " << live_pgn_path_ << '\n'
-              << "  SITE: " << site_ << '\n'
-              << "  PORT: " << port_ << '\n'
-              << "  ICSMODE: " << ics_mode_ << '\n'
-              << "  SAVEDEBUG: " << (save_debug_ ? "1" : "0") << '\n';
+    std::cout << "[tlcs] TLCS ini loaded: TOURNEYPGN=\"" << live_pgn_path_ << "\" "
+              << "SITE=\"" << site_ << "\" "
+              << "PORT=" << port_ << " "
+              << "ICSMODE=" << ics_mode_ << '\n';
 
     return true;
 }
@@ -60,13 +55,20 @@ bool TlcsIniAdapter::ParseServerIni(const std::string& config_path) {
 
     std::string line;
     while (std::getline(file, line)) {
-        const auto eq_pos = line.find('=');
+        const auto trimmed = Trim(line);
+        if (trimmed.empty()) {
+            continue;
+        }
+        if (trimmed[0] == '#' || trimmed[0] == ';') {
+            continue;
+        }
+        const auto eq_pos = trimmed.find('=');
         if (eq_pos == std::string::npos) {
             continue;
         }
 
-        const auto key = Trim(std::string_view(line).substr(0, eq_pos));
-        const auto value = Trim(std::string_view(line).substr(eq_pos + 1));
+        const auto key = Trim(std::string_view(trimmed).substr(0, eq_pos));
+        const auto value = Trim(std::string_view(trimmed).substr(eq_pos + 1));
 
         if (key == "TOURNEYPGN") {
             live_pgn_path_ = value;
@@ -85,39 +87,7 @@ bool TlcsIniAdapter::ParseServerIni(const std::string& config_path) {
 }
 
 bool TlcsIniAdapter::WriteAtomically(const std::string& pgn) const {
-    const std::string temp_path = live_pgn_path_ + ".tmp";
-
-    std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        std::cerr << "[tlcs] Failed to open temp file: " << temp_path << '\n';
-        return false;
-    }
-
-    output.write(pgn.data(), static_cast<std::streamsize>(pgn.size()));
-    output.flush();
-    if (!output) {
-        std::cerr << "[tlcs] Failed to write temp PGN: " << temp_path << '\n';
-        return false;
-    }
-
-#ifdef _WIN32
-    const BOOL moved = MoveFileExA(
-        temp_path.c_str(),
-        live_pgn_path_.c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-    if (!moved) {
-        std::cerr << "[tlcs] MoveFileEx failed for " << live_pgn_path_ << '\n';
-        return false;
-    }
-#else
-    std::remove(live_pgn_path_.c_str());
-    if (std::rename(temp_path.c_str(), live_pgn_path_.c_str()) != 0) {
-        std::cerr << "[tlcs] rename failed for " << live_pgn_path_ << '\n';
-        return false;
-    }
-#endif
-
-    return true;
+    return ijccrl::core::util::AtomicFileWriter::Write(live_pgn_path_, pgn);
 }
 
 }  // namespace ijccrl::core::broadcast

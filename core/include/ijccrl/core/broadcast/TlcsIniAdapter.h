@@ -13,6 +13,7 @@ public:
 
     const std::string& live_pgn_path() const { return live_pgn_path_; }
     const std::string& server_ini_path() const { return server_ini_path_; }
+    const std::string& site() const { return site_; }
 
 private:
     bool WriteAtomically(const std::string& pgn) const;
