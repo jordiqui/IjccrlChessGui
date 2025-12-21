@@ -436,6 +436,13 @@ ProbeInfo GameTerminator::BuildProbeInfo() const {
     return prober.Probe(*position_state_);
 }
 
+std::string GameTerminator::CurrentFen() const {
+    if (!position_state_) {
+        return {};
+    }
+    return position_state_->Fen();
+}
+
 TerminationOutcome GameTerminator::ShouldEnd(const ijccrl::core::game::GameState& state,
                                              const EngineInfos& infos,
                                              const ProbeInfo& probe,

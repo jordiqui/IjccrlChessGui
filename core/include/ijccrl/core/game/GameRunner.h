@@ -16,10 +16,12 @@ namespace ijccrl::core::game {
 class GameRunner {
 public:
     using LiveUpdateFn = std::function<void(const ijccrl::core::pgn::PgnGame&)>;
+    using MoveUpdateFn = std::function<void(const std::string&, const std::string&)>;
 
     struct Result {
         GameState state;
         ijccrl::core::pgn::PgnGame pgn;
+        std::string final_fen;
     };
 
     Result PlayGame(ijccrl::core::uci::UciEngine& white,
@@ -31,7 +33,8 @@ public:
                     ijccrl::core::pgn::PgnGame pgn_template,
                     const std::string& initial_fen,
                     const std::vector<std::string>& opening_moves,
-                    const LiveUpdateFn& live_update);
+                    const LiveUpdateFn& live_update,
+                    const MoveUpdateFn& move_update);
 };
 
 }  // namespace ijccrl::core::game

@@ -25,6 +25,7 @@ MatchRunner::MatchRunner(EnginePool& pool,
                          bool pause_on_unhealthy,
                          ResultCallback result_callback,
                          LiveUpdateFn live_update,
+                         MoveUpdateFn move_update,
                          WatchdogLogFn watchdog_log,
                          JobEventFn job_event)
     : pool_(pool),
@@ -37,6 +38,7 @@ MatchRunner::MatchRunner(EnginePool& pool,
       pause_on_unhealthy_(pause_on_unhealthy),
       result_callback_(std::move(result_callback)),
       live_update_(std::move(live_update)),
+      move_update_(std::move(move_update)),
       watchdog_log_(std::move(watchdog_log)),
       job_event_(std::move(job_event)) {}
 
@@ -137,6 +139,11 @@ void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
                 live_update_(live_game);
             }
         };
+        const auto move_update = [&](const std::string& move_uci, const std::string& fen_after_move) {
+            if (move_update_) {
+                move_update_(job, game_number, move_uci, fen_after_move);
+            }
+        };
 
         auto result = runner.PlayGame(white,
                                       black,
@@ -147,7 +154,8 @@ void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
                                       pgn,
                                       job.opening.fen,
                                       job.opening.moves,
-                                      live_update);
+                                      live_update,
+                                      move_update);
 
         const auto handle_failure = [&](int engine_id,
                                          ijccrl::core::uci::UciEngine& engine,

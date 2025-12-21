@@ -2,6 +2,8 @@ add_library(ijccrlcore
     src/ijccrlcore.cpp
     src/api/RunnerConfig.cpp
     src/api/RunnerService.cpp
+    src/broadcast/TlcsFeedAdapter.cpp
+    src/broadcast/TlcsFeedWriter.cpp
     src/broadcast/TlcsIniAdapter.cpp
     src/export/ExportWriter.cpp
     src/game/GameRunner.cpp
