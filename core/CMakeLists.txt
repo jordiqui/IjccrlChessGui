@@ -1,5 +1,7 @@
 add_library(ijccrlcore
     src/ijccrlcore.cpp
+    src/api/RunnerConfig.cpp
+    src/api/RunnerService.cpp
     src/broadcast/TlcsIniAdapter.cpp
     src/game/GameRunner.cpp
     src/openings/EpdParser.cpp
@@ -17,6 +19,7 @@ add_library(ijccrlcore
 
 target_include_directories(ijccrlcore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 if(MSVC)

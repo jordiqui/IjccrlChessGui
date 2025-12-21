@@ -1,6 +1,7 @@
 #include "ijccrl/core/runtime/MatchRunner.h"
 
 #include <algorithm>
+#include <mutex>
 #include <thread>
 
 namespace {
@@ -17,14 +18,16 @@ MatchRunner::MatchRunner(EnginePool& pool,
                          ijccrl::core::game::TimeControl time_control,
                          int max_plies,
                          ResultCallback result_callback,
-                         LiveUpdateFn live_update)
+                         LiveUpdateFn live_update,
+                         JobEventFn job_event)
     : pool_(pool),
       time_control_(time_control),
       max_plies_(max_plies),
       result_callback_(std::move(result_callback)),
-      live_update_(std::move(live_update)) {}
+      live_update_(std::move(live_update)),
+      job_event_(std::move(job_event)) {}
 
-void MatchRunner::Run(const std::vector<MatchJob>& jobs, int concurrency) {
+void MatchRunner::Run(const std::vector<MatchJob>& jobs, int concurrency, const Control& control) {
     if (jobs.empty()) {
         return;
     }
@@ -36,7 +39,7 @@ void MatchRunner::Run(const std::vector<MatchJob>& jobs, int concurrency) {
     std::atomic<int> game_counter{0};
 
     for (int i = 0; i < worker_count; ++i) {
-        workers.emplace_back([&]() { RunWorker(jobs, next_job, game_counter); });
+        workers.emplace_back([&]() { RunWorker(jobs, next_job, game_counter, control); });
     }
 
     for (auto& worker : workers) {
@@ -48,16 +51,34 @@ void MatchRunner::Run(const std::vector<MatchJob>& jobs, int concurrency) {
 
 void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
                             std::atomic<size_t>& next_job,
-                            std::atomic<int>& game_counter) {
+                            std::atomic<int>& game_counter,
+                            const Control& control) {
     ijccrl::core::game::GameRunner runner;
 
     while (true) {
+        if (control.stop && control.stop->load()) {
+            return;
+        }
+        if (control.paused && control.pause_mutex && control.pause_cv) {
+            std::unique_lock<std::mutex> lock(*control.pause_mutex);
+            control.pause_cv->wait(lock, [&]() {
+                return !control.paused->load() || (control.stop && control.stop->load());
+            });
+        }
+        if (control.stop && control.stop->load()) {
+            return;
+        }
+
         const size_t index = next_job.fetch_add(1);
         if (index >= jobs.size()) {
             return;
         }
 
         const auto& job = jobs[index];
+        const int game_number = game_counter.fetch_add(1) + 1;
+        if (job_event_) {
+            job_event_(job, game_number, true);
+        }
         auto lease = pool_.AcquirePair(job.fixture.white_engine_id,
                                        job.fixture.black_engine_id);
         auto& white = lease.white();
@@ -104,7 +125,10 @@ void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
             pool_.RestartEngine(job.fixture.black_engine_id);
         }
 
-        MatchResult payload{job, result, game_counter.fetch_add(1) + 1};
+        if (job_event_) {
+            job_event_(job, game_number, false);
+        }
+        MatchResult payload{job, result, game_number};
         if (result_callback_) {
             result_callback_(payload);
         }
