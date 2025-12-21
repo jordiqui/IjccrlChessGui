@@ -134,6 +134,17 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
         config.output.results_json = output.value("results_json", config.output.results_json);
         config.output.pairings_csv = output.value("pairings_csv", config.output.pairings_csv);
         config.output.progress_log = output.value("progress_log", config.output.progress_log);
+        config.output.checkpoint_json = output.value("checkpoint_json", config.output.checkpoint_json);
+        config.output.standings_csv = output.value("standings_csv", config.output.standings_csv);
+        config.output.standings_html = output.value("standings_html", config.output.standings_html);
+        config.output.summary_json = output.value("summary_json", config.output.summary_json);
+        config.output.metrics_json = output.value("metrics_json", config.output.metrics_json);
+        config.output.games_dir = output.value("games_dir", config.output.games_dir);
+        config.output.write_game_files = output.value("write_game_files", config.output.write_game_files);
+        config.output.checkpoint_interval_seconds =
+            output.value("checkpoint_interval_seconds", config.output.checkpoint_interval_seconds);
+        config.output.metrics_interval_seconds =
+            output.value("metrics_interval_seconds", config.output.metrics_interval_seconds);
     }
 
     if (root.contains("broadcast")) {
@@ -147,9 +158,24 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
         config.limits.max_plies = limits.value("max_plies", config.limits.max_plies);
         config.limits.draw_by_repetition = limits.value("draw_by_repetition", config.limits.draw_by_repetition);
         config.limits.max_games = limits.value("max_games", config.limits.max_games);
+        config.limits.abort_on_stop = limits.value("abort_on_stop", config.limits.abort_on_stop);
     } else {
         config.limits.max_plies = root.value("max_plies", config.limits.max_plies);
         config.limits.max_games = root.value("max_games", config.limits.max_games);
+    }
+
+    if (root.contains("watchdog")) {
+        const auto& watchdog = root.at("watchdog");
+        config.watchdog.handshake_timeout_ms =
+            watchdog.value("handshake_timeout_ms", config.watchdog.handshake_timeout_ms);
+        config.watchdog.go_timeout_ms =
+            watchdog.value("go_timeout_ms", config.watchdog.go_timeout_ms);
+        config.watchdog.max_failures =
+            watchdog.value("max_failures", config.watchdog.max_failures);
+        config.watchdog.failure_window_games =
+            watchdog.value("failure_window_games", config.watchdog.failure_window_games);
+        config.watchdog.pause_on_unhealthy =
+            watchdog.value("pause_on_unhealthy", config.watchdog.pause_on_unhealthy);
     }
 
     return true;
@@ -189,6 +215,15 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
         {"results_json", config.output.results_json},
         {"pairings_csv", config.output.pairings_csv},
         {"progress_log", config.output.progress_log},
+        {"checkpoint_json", config.output.checkpoint_json},
+        {"standings_csv", config.output.standings_csv},
+        {"standings_html", config.output.standings_html},
+        {"summary_json", config.output.summary_json},
+        {"metrics_json", config.output.metrics_json},
+        {"games_dir", config.output.games_dir},
+        {"write_game_files", config.output.write_game_files},
+        {"checkpoint_interval_seconds", config.output.checkpoint_interval_seconds},
+        {"metrics_interval_seconds", config.output.metrics_interval_seconds},
     };
 
     root["broadcast"] = {
@@ -200,6 +235,15 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
         {"max_plies", config.limits.max_plies},
         {"max_games", config.limits.max_games},
         {"draw_by_repetition", config.limits.draw_by_repetition},
+        {"abort_on_stop", config.limits.abort_on_stop},
+    };
+
+    root["watchdog"] = {
+        {"handshake_timeout_ms", config.watchdog.handshake_timeout_ms},
+        {"go_timeout_ms", config.watchdog.go_timeout_ms},
+        {"max_failures", config.watchdog.max_failures},
+        {"failure_window_games", config.watchdog.failure_window_games},
+        {"pause_on_unhealthy", config.watchdog.pause_on_unhealthy},
     };
 
     const std::filesystem::path fs_path(path);
@@ -217,6 +261,66 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
 
     output << root.dump(2);
     return true;
+}
+
+std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
+    nlohmann::json root;
+    root["engines"] = nlohmann::json::array();
+    for (const auto& engine : config.engines) {
+        root["engines"].push_back(WriteEngine(engine));
+    }
+    root["time_control"] = {
+        {"base_seconds", config.time_control.base_seconds},
+        {"increment_seconds", config.time_control.increment_seconds},
+        {"move_time_ms", config.time_control.move_time_ms},
+    };
+    root["tournament"] = {
+        {"mode", config.tournament.mode},
+        {"double_round_robin", config.tournament.double_round_robin},
+        {"rounds", config.tournament.rounds},
+        {"games_per_pairing", config.tournament.games_per_pairing},
+        {"concurrency", config.tournament.concurrency},
+    };
+    root["openings"] = {
+        {"type", config.openings.type},
+        {"path", config.openings.path},
+        {"policy", config.openings.policy},
+        {"seed", config.openings.seed},
+    };
+    root["output"] = {
+        {"tournament_pgn", config.output.tournament_pgn},
+        {"live_pgn", config.output.live_pgn},
+        {"results_json", config.output.results_json},
+        {"pairings_csv", config.output.pairings_csv},
+        {"progress_log", config.output.progress_log},
+        {"checkpoint_json", config.output.checkpoint_json},
+        {"standings_csv", config.output.standings_csv},
+        {"standings_html", config.output.standings_html},
+        {"summary_json", config.output.summary_json},
+        {"metrics_json", config.output.metrics_json},
+        {"games_dir", config.output.games_dir},
+        {"write_game_files", config.output.write_game_files},
+        {"checkpoint_interval_seconds", config.output.checkpoint_interval_seconds},
+        {"metrics_interval_seconds", config.output.metrics_interval_seconds},
+    };
+    root["broadcast"] = {
+        {"adapter", config.broadcast.adapter},
+        {"server_ini", config.broadcast.server_ini},
+    };
+    root["limits"] = {
+        {"max_plies", config.limits.max_plies},
+        {"max_games", config.limits.max_games},
+        {"draw_by_repetition", config.limits.draw_by_repetition},
+        {"abort_on_stop", config.limits.abort_on_stop},
+    };
+    root["watchdog"] = {
+        {"handshake_timeout_ms", config.watchdog.handshake_timeout_ms},
+        {"go_timeout_ms", config.watchdog.go_timeout_ms},
+        {"max_failures", config.watchdog.max_failures},
+        {"failure_window_games", config.watchdog.failure_window_games},
+        {"pause_on_unhealthy", config.watchdog.pause_on_unhealthy},
+    };
+    return root.dump();
 }
 
 }  // namespace ijccrl::core::api

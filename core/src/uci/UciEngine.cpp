@@ -18,11 +18,16 @@ bool UciEngine::Start(const std::string& working_dir) {
 }
 
 void UciEngine::Stop() {
-    process_.Terminate();
+    process_.WriteLine("quit");
+    if (!process_.WaitForExit(500)) {
+        process_.Terminate();
+    }
 }
 
 bool UciEngine::UciHandshake() {
+    last_failure_ = Failure::None;
     if (!process_.WriteLine("uci")) {
+        last_failure_ = Failure::WriteFailed;
         return false;
     }
 
@@ -35,6 +40,10 @@ bool UciEngine::UciHandshake() {
                                    deadline - std::chrono::steady_clock::now())
                                    .count();
         if (!ReadLineWithTimeout(line, static_cast<int>(remaining))) {
+            if (!process_.IsRunning()) {
+                last_failure_ = Failure::EngineExited;
+                return false;
+            }
             continue;
         }
 
@@ -60,6 +69,7 @@ bool UciEngine::UciHandshake() {
         }
     }
 
+    last_failure_ = Failure::HandshakeTimeout;
     return false;
 }
 
@@ -74,10 +84,16 @@ bool UciEngine::SetOption(const std::string& name, const std::string& value) {
 }
 
 bool UciEngine::IsReady() {
+    last_failure_ = Failure::None;
     if (!process_.WriteLine("isready")) {
+        last_failure_ = Failure::WriteFailed;
         return false;
     }
-    return WaitForToken("readyok", handshake_timeout_ms_);
+    const bool ok = WaitForToken("readyok", handshake_timeout_ms_);
+    if (!ok && !process_.IsRunning()) {
+        last_failure_ = Failure::EngineExited;
+    }
+    return ok;
 }
 
 void UciEngine::NewGame() {
@@ -107,6 +123,7 @@ bool UciEngine::Go(int wtime_ms,
                    int movetime_ms,
                    int timeout_ms,
                    std::string& bestmove) {
+    last_failure_ = Failure::None;
     std::ostringstream command;
     command << "go";
     command << " wtime " << wtime_ms;
@@ -118,6 +135,7 @@ bool UciEngine::Go(int wtime_ms,
     }
 
     if (!process_.WriteLine(command.str())) {
+        last_failure_ = Failure::WriteFailed;
         return false;
     }
 
@@ -130,6 +148,10 @@ bool UciEngine::Go(int wtime_ms,
                                    deadline - std::chrono::steady_clock::now())
                                    .count();
         if (!ReadLineWithTimeout(line, static_cast<int>(remaining))) {
+            if (!process_.IsRunning()) {
+                last_failure_ = Failure::EngineExited;
+                return false;
+            }
             continue;
         }
 
@@ -140,6 +162,7 @@ bool UciEngine::Go(int wtime_ms,
             iss >> bestmove;
             if (bestmove == "(none)") {
                 bestmove.clear();
+                last_failure_ = Failure::NoBestmove;
                 return false;
             }
             return true;
@@ -147,6 +170,7 @@ bool UciEngine::Go(int wtime_ms,
     }
 
     bestmove.clear();
+    last_failure_ = Failure::Timeout;
     return false;
 }
 

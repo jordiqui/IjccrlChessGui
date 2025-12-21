@@ -1,8 +1,11 @@
 #include "MainWindow.h"
 #include "TournamentWizard.h"
 
+#include "ijccrl/core/persist/CheckpointState.h"
+
 #include <QAction>
 #include <QDesktopServices>
+#include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -18,6 +21,7 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace {
 
@@ -72,19 +76,23 @@ void MainWindow::createUi() {
     auto* save_action = toolbar->addAction("Save Profile");
     toolbar->addSeparator();
     start_action_ = toolbar->addAction("Start");
+    resume_tournament_action_ = toolbar->addAction("Resume Tournament");
     pause_action_ = toolbar->addAction("Pause");
     resume_action_ = toolbar->addAction("Resume");
     stop_action_ = toolbar->addAction("Stop");
     toolbar->addSeparator();
+    export_results_action_ = toolbar->addAction("Export Results");
     auto* open_output_action = toolbar->addAction("Open Output Folder");
 
     connect(new_action, &QAction::triggered, this, &MainWindow::newProfile);
     connect(open_action, &QAction::triggered, this, &MainWindow::openProfile);
     connect(save_action, &QAction::triggered, this, &MainWindow::saveProfile);
     connect(start_action_, &QAction::triggered, this, &MainWindow::startRunner);
+    connect(resume_tournament_action_, &QAction::triggered, this, &MainWindow::resumeTournament);
     connect(pause_action_, &QAction::triggered, this, &MainWindow::pauseRunner);
     connect(resume_action_, &QAction::triggered, this, &MainWindow::resumeRunner);
     connect(stop_action_, &QAction::triggered, this, &MainWindow::stopRunner);
+    connect(export_results_action_, &QAction::triggered, this, &MainWindow::exportResults);
     connect(open_output_action, &QAction::triggered, this, &MainWindow::openOutputFolder);
 
     auto* tabs = new QTabWidget(this);
@@ -384,6 +392,87 @@ void MainWindow::stopRunner() {
     runner_service_.requestStop();
 }
 
+void MainWindow::resumeTournament() {
+    auto config = buildConfigFromUi();
+    runner_service_.setConfig(config);
+
+    const QString checkpoint_path = QString::fromStdString(config.output.checkpoint_json);
+    const QFileInfo checkpoint_info(checkpoint_path);
+    if (!checkpoint_info.exists()) {
+        QMessageBox::information(this, "Resume", "No checkpoint.json found in the output directory.");
+        return;
+    }
+
+    ijccrl::core::persist::CheckpointState checkpoint;
+    std::string error;
+    if (!ijccrl::core::persist::LoadCheckpoint(checkpoint_path.toStdString(), checkpoint, &error)) {
+        QMessageBox::warning(this, "Resume", QString::fromStdString(error));
+        return;
+    }
+
+    const std::string config_hash =
+        ijccrl::core::persist::ComputeConfigHash(ijccrl::core::api::RunnerConfig::ToJsonString(config));
+    if (checkpoint.config_hash != config_hash) {
+        QMessageBox::warning(this,
+                             "Resume",
+                             "Checkpoint does not match current configuration.");
+        return;
+    }
+
+    QString details;
+    details += QString("Resume existing tournament from %1\n\n").arg(checkpoint_path);
+    details += QString("Games played: %1\n").arg(static_cast<int>(checkpoint.completed_games.size()));
+    if (checkpoint.next_game.fixture_index >= 0) {
+        details += QString("Next game: %1 vs %2 (opening %3)\n")
+                       .arg(QString::fromStdString(checkpoint.next_game.white))
+                       .arg(QString::fromStdString(checkpoint.next_game.black))
+                       .arg(QString::fromStdString(checkpoint.next_game.opening_id));
+    } else {
+        details += "Next game: -\n";
+    }
+
+    auto standings = checkpoint.standings;
+    std::sort(standings.begin(), standings.end(), [](const auto& a, const auto& b) {
+        if (a.points != b.points) {
+            return a.points > b.points;
+        }
+        return a.games > b.games;
+    });
+    details += "\nTop 3 standings:\n";
+    for (size_t i = 0; i < std::min<size_t>(3, standings.size()); ++i) {
+        const auto& row = standings[i];
+        details += QString("%1. %2 (%3 pts)\n")
+                       .arg(static_cast<int>(i + 1))
+                       .arg(QString::fromStdString(row.name))
+                       .arg(row.points);
+    }
+
+    const auto reply = QMessageBox::question(this,
+                                             "Resume Tournament",
+                                             details,
+                                             QMessageBox::Ok | QMessageBox::Cancel);
+    if (reply != QMessageBox::Ok) {
+        return;
+    }
+
+    if (!runner_service_.startWithResume(true)) {
+        QMessageBox::information(this, "Runner", "Runner already active.");
+    }
+}
+
+void MainWindow::exportResults() {
+    const auto directory = QFileDialog::getExistingDirectory(this, "Export results");
+    if (directory.isEmpty()) {
+        return;
+    }
+    std::string error;
+    if (!runner_service_.exportResults(directory.toStdString(), &error)) {
+        QMessageBox::warning(this, "Export", QString::fromStdString(error));
+        return;
+    }
+    QMessageBox::information(this, "Export", "Results exported successfully.");
+}
+
 void MainWindow::openOutputFolder() {
     output_dir_ = output_dir_edit_->text();
     if (output_dir_.isEmpty()) {
@@ -404,6 +493,11 @@ void MainWindow::updateLiveView() {
     resume_action_->setEnabled(state.running && state.paused);
     stop_action_->setEnabled(state.running);
     start_action_->setEnabled(!state.running);
+    export_results_action_->setEnabled(!state.running);
+
+    const auto output_dir = output_dir_edit_->text().isEmpty() ? "out" : output_dir_edit_->text();
+    const QString checkpoint_path = QDir(output_dir).filePath("checkpoint.json");
+    resume_tournament_action_->setEnabled(!state.running && QFileInfo::exists(checkpoint_path));
 }
 
 void MainWindow::updateLogInterval(int value) {
@@ -518,6 +612,12 @@ ijccrl::core::api::RunnerConfig MainWindow::buildConfigFromUi() const {
     config.output.results_json = output_base + "/results.json";
     config.output.pairings_csv = output_base + "/pairings.csv";
     config.output.progress_log = output_base + "/progress.log";
+    config.output.checkpoint_json = output_base + "/checkpoint.json";
+    config.output.standings_csv = output_base + "/standings.csv";
+    config.output.standings_html = output_base + "/standings.html";
+    config.output.summary_json = output_base + "/summary.json";
+    config.output.metrics_json = output_base + "/metrics.json";
+    config.output.games_dir = output_base + "/games";
 
     if (!server_ini_path_->text().isEmpty()) {
         config.broadcast.adapter = "tlcs_ini";

@@ -5,6 +5,7 @@
 #include "ijccrl/core/pgn/PgnGame.h"
 #include "ijccrl/core/uci/UciEngine.h"
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <vector>
@@ -24,6 +25,8 @@ public:
                     ijccrl::core::uci::UciEngine& black,
                     const TimeControl& time_control,
                     int max_plies,
+                    int go_timeout_ms,
+                    const std::atomic<bool>* stop_requested,
                     ijccrl::core::pgn::PgnGame pgn_template,
                     const std::string& initial_fen,
                     const std::vector<std::string>& opening_moves,

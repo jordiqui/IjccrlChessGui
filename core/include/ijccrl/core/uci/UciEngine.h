@@ -10,6 +10,16 @@ namespace ijccrl::core::uci {
 
 class UciEngine {
 public:
+    enum class Failure {
+        None,
+        Timeout,
+        EngineExited,
+        WriteFailed,
+        NoBestmove,
+        HandshakeTimeout,
+        HandshakeFailed
+    };
+
     UciEngine(std::string name,
               std::string command,
               std::vector<std::string> args);
@@ -33,6 +43,9 @@ public:
             std::string& bestmove);
 
     bool IsRunning() const { return process_.IsRunning(); }
+    Failure last_failure() const { return last_failure_; }
+    void clear_failure() { last_failure_ = Failure::None; }
+    int exit_code() const { return process_.ExitCode(); }
 
     const std::string& name() const { return name_; }
     const std::string& id_name() const { return id_name_; }
@@ -52,6 +65,7 @@ private:
     std::string id_author_;
 
     int handshake_timeout_ms_ = 10000;
+    Failure last_failure_ = Failure::None;
 
     ijccrl::core::process::Process process_;
 };

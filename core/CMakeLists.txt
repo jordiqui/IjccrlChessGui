@@ -3,10 +3,12 @@ add_library(ijccrlcore
     src/api/RunnerConfig.cpp
     src/api/RunnerService.cpp
     src/broadcast/TlcsIniAdapter.cpp
+    src/export/ExportWriter.cpp
     src/game/GameRunner.cpp
     src/openings/EpdParser.cpp
     src/openings/OpeningPolicy.cpp
     src/openings/PgnSuite.cpp
+    src/persist/CheckpointState.cpp
     src/pgn/PgnWriter.cpp
     src/process/Process.cpp
     src/runtime/EnginePool.cpp
