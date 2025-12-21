@@ -65,6 +65,28 @@ struct LimitsConfig {
     bool abort_on_stop = true;
 };
 
+struct AdjudicationConfig {
+    bool enabled = true;
+    int score_draw_cp = 15;
+    int score_draw_moves = 8;
+    int score_win_cp = 700;
+    int score_win_moves = 6;
+    int min_depth = 12;
+};
+
+struct TablebaseConfig {
+    bool enabled = true;
+    std::vector<std::string> paths;
+    int probe_limit_pieces = 6;
+};
+
+struct ResignConfig {
+    bool enabled = true;
+    int cp = 900;
+    int moves = 3;
+    int min_depth = 12;
+};
+
 struct WatchdogConfig {
     int handshake_timeout_ms = 10000;
     int go_timeout_ms = 0;
@@ -81,6 +103,9 @@ struct RunnerConfig {
     OutputConfig output;
     BroadcastConfig broadcast;
     LimitsConfig limits;
+    AdjudicationConfig adjudication;
+    TablebaseConfig tablebases;
+    ResignConfig resign;
     WatchdogConfig watchdog;
 
     static bool LoadFromFile(const std::string& path, RunnerConfig& config, std::string* error);

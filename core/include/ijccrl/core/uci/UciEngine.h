@@ -50,6 +50,17 @@ public:
     const std::string& name() const { return name_; }
     const std::string& id_name() const { return id_name_; }
     const std::string& id_author() const { return id_author_; }
+    struct Info {
+        bool has_score_cp = false;
+        int score_cp = 0;
+        bool has_score_mate = false;
+        int score_mate = 0;
+        int depth = 0;
+        long long nodes = 0;
+        long long nps = 0;
+    };
+
+    const Info& last_info() const { return last_info_; }
 
 private:
     bool WaitForToken(const std::string& token, int timeout_ms);
@@ -63,6 +74,7 @@ private:
 
     std::string id_name_;
     std::string id_author_;
+    Info last_info_{};
 
     int handshake_timeout_ms_ = 10000;
     Failure last_failure_ = Failure::None;

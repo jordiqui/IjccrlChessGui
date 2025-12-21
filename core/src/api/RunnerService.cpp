@@ -13,6 +13,7 @@
 #include "ijccrl/core/tournament/RoundRobinScheduler.h"
 #include "ijccrl/core/tournament/SwissScheduler.h"
 #include "ijccrl/core/util/AtomicFileWriter.h"
+#include "ijccrl/core/rules/Termination.h"
 
 #include <nlohmann/json.hpp>
 
@@ -85,12 +86,14 @@ void WriteResultsJson(const std::string& path,
                       const std::string& event_name,
                       const std::string& tc_desc,
                       const std::string& mode,
-                      const ijccrl::core::stats::StandingsTable& standings) {
+                      const ijccrl::core::stats::StandingsTable& standings,
+                      const std::unordered_map<std::string, int>& termination_counts) {
     nlohmann::json results_json;
     results_json["event"] = event_name;
     results_json["tc"] = tc_desc;
     results_json["mode"] = mode;
     results_json["games_played"] = standings.games_played();
+    results_json["termination_counts"] = termination_counts;
     results_json["standings"] = nlohmann::json::array();
     for (const auto& entry : standings.standings()) {
         results_json["standings"].push_back({
@@ -571,6 +574,7 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
         std::mutex output_mutex;
         std::mutex checkpoint_mutex;
         std::vector<ijccrl::core::persist::ActiveGameMeta> active_games_meta;
+        std::unordered_map<std::string, int> termination_counts;
 
         const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
             const std::string live_pgn = ijccrl::core::pgn::PgnWriter::Render(live_game);
@@ -600,6 +604,8 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
                 state_.openingId = job.opening.id;
                 state_.lastMove.clear();
                 state_.fen = job.opening.fen;
+                state_.terminationReason.clear();
+                state_.tablebaseUsed = false;
                 state_.activeGames = active_games.load();
                 {
                     std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
@@ -661,6 +667,9 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
             }
 
             standings.RecordResult(fixture.white_engine_id, fixture.black_engine_id, result.result.state.result);
+            if (!result.result.state.termination.empty()) {
+                termination_counts[result.result.state.termination] += 1;
+            }
 
             const auto update_color = [&](int engine_id, int color) {
                 auto& state = color_history[static_cast<size_t>(engine_id)];
@@ -733,13 +742,20 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
                 }
             }
 
+            {
+                std::lock_guard<std::mutex> state_lock(state_mutex_);
+                state_.terminationReason = result.result.state.termination;
+                state_.tablebaseUsed = result.result.state.tablebase_used;
+            }
+
             std::ostringstream tc_desc;
             tc_desc << config.time_control.base_seconds << "+" << config.time_control.increment_seconds;
             WriteResultsJson(config.output.results_json,
                              event_name,
                              tc_desc.str(),
                              config.tournament.mode,
-                             standings);
+                             standings,
+                             termination_counts);
 
             ijccrl::core::exporter::WriteStandingsCsv(config.output.standings_csv, standings.standings());
             ijccrl::core::exporter::WriteStandingsHtml(config.output.standings_html,
@@ -921,9 +937,26 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
             });
         }
 
+        ijccrl::core::rules::ConfigLimits termination_limits;
+        termination_limits.max_plies = config.limits.max_plies;
+        termination_limits.draw_by_repetition = config.limits.draw_by_repetition;
+        termination_limits.adjudication.enabled = config.adjudication.enabled;
+        termination_limits.adjudication.score_draw_cp = config.adjudication.score_draw_cp;
+        termination_limits.adjudication.score_draw_moves = config.adjudication.score_draw_moves;
+        termination_limits.adjudication.score_win_cp = config.adjudication.score_win_cp;
+        termination_limits.adjudication.score_win_moves = config.adjudication.score_win_moves;
+        termination_limits.adjudication.min_depth = config.adjudication.min_depth;
+        termination_limits.tablebases.enabled = config.tablebases.enabled;
+        termination_limits.tablebases.paths = config.tablebases.paths;
+        termination_limits.tablebases.probe_limit_pieces = config.tablebases.probe_limit_pieces;
+        termination_limits.resign.enabled = config.resign.enabled;
+        termination_limits.resign.cp = config.resign.cp;
+        termination_limits.resign.moves = config.resign.moves;
+        termination_limits.resign.min_depth = config.resign.min_depth;
+
         ijccrl::core::runtime::MatchRunner match_runner(pool,
                                                         time_control,
-                                                        config.limits.max_plies,
+                                                        termination_limits,
                                                         config.watchdog.go_timeout_ms,
                                                         config.limits.abort_on_stop,
                                                         config.watchdog.max_failures,
@@ -1174,6 +1207,7 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
     std::mutex output_mutex;
     std::mutex checkpoint_mutex;
     std::vector<ijccrl::core::persist::ActiveGameMeta> active_games_meta;
+    std::unordered_map<std::string, int> termination_counts;
     int total_games = static_cast<int>(fixtures.size());
 
     const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
@@ -1205,6 +1239,8 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
             state_.openingId = job.opening.id;
             state_.lastMove.clear();
             state_.fen = job.opening.fen;
+            state_.terminationReason.clear();
+            state_.tablebaseUsed = false;
             state_.activeGames = active_games.load();
             if (job.fixture.round_index != last_pairings_round &&
                 job.fixture.round_index >= 0 &&
@@ -1273,6 +1309,9 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
         }
 
         standings.RecordResult(fixture.white_engine_id, fixture.black_engine_id, result.result.state.result);
+        if (!result.result.state.termination.empty()) {
+            termination_counts[result.result.state.termination] += 1;
+        }
 
         std::ostringstream csv_line;
         csv_line << result.game_number << ','
@@ -1305,13 +1344,20 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
             }
         }
 
+        {
+            std::lock_guard<std::mutex> state_lock(state_mutex_);
+            state_.terminationReason = result.result.state.termination;
+            state_.tablebaseUsed = result.result.state.tablebase_used;
+        }
+
         std::ostringstream tc_desc;
         tc_desc << config.time_control.base_seconds << "+" << config.time_control.increment_seconds;
         WriteResultsJson(config.output.results_json,
                          "ijccrl round robin",
                          tc_desc.str(),
                          config.tournament.mode,
-                         standings);
+                         standings,
+                         termination_counts);
 
         ijccrl::core::exporter::WriteStandingsCsv(config.output.standings_csv, standings.standings());
         ijccrl::core::exporter::WriteStandingsHtml(config.output.standings_html,
@@ -1474,9 +1520,26 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
         });
     }
 
+    ijccrl::core::rules::ConfigLimits termination_limits;
+    termination_limits.max_plies = config.limits.max_plies;
+    termination_limits.draw_by_repetition = config.limits.draw_by_repetition;
+    termination_limits.adjudication.enabled = config.adjudication.enabled;
+    termination_limits.adjudication.score_draw_cp = config.adjudication.score_draw_cp;
+    termination_limits.adjudication.score_draw_moves = config.adjudication.score_draw_moves;
+    termination_limits.adjudication.score_win_cp = config.adjudication.score_win_cp;
+    termination_limits.adjudication.score_win_moves = config.adjudication.score_win_moves;
+    termination_limits.adjudication.min_depth = config.adjudication.min_depth;
+    termination_limits.tablebases.enabled = config.tablebases.enabled;
+    termination_limits.tablebases.paths = config.tablebases.paths;
+    termination_limits.tablebases.probe_limit_pieces = config.tablebases.probe_limit_pieces;
+    termination_limits.resign.enabled = config.resign.enabled;
+    termination_limits.resign.cp = config.resign.cp;
+    termination_limits.resign.moves = config.resign.moves;
+    termination_limits.resign.min_depth = config.resign.min_depth;
+
     ijccrl::core::runtime::MatchRunner match_runner(pool,
                                                     time_control,
-                                                    config.limits.max_plies,
+                                                    termination_limits,
                                                     config.watchdog.go_timeout_ms,
                                                     config.limits.abort_on_stop,
                                                     config.watchdog.max_failures,

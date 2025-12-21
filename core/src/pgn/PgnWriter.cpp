@@ -17,6 +17,9 @@ std::string PgnWriter::Render(const PgnGame& game) {
         }
         out << game.moves[i] << ' ';
     }
+    if (!game.termination_comment.empty()) {
+        out << '{' << game.termination_comment << "} ";
+    }
     out << game.result;
     out << "\n";
     return out.str();

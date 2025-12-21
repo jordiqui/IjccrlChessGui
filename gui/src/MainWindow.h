@@ -71,6 +71,19 @@ private:
 
     QLineEdit* server_ini_path_ = nullptr;
     QLineEdit* output_dir_edit_ = nullptr;
+    QCheckBox* adjudication_enabled_ = nullptr;
+    QSpinBox* adjudication_draw_cp_ = nullptr;
+    QSpinBox* adjudication_draw_moves_ = nullptr;
+    QSpinBox* adjudication_win_cp_ = nullptr;
+    QSpinBox* adjudication_win_moves_ = nullptr;
+    QSpinBox* adjudication_min_depth_ = nullptr;
+    QCheckBox* resign_enabled_ = nullptr;
+    QSpinBox* resign_cp_ = nullptr;
+    QSpinBox* resign_moves_ = nullptr;
+    QSpinBox* resign_min_depth_ = nullptr;
+    QCheckBox* tablebase_enabled_ = nullptr;
+    QLineEdit* tablebase_paths_ = nullptr;
+    QSpinBox* tablebase_piece_limit_ = nullptr;
 
     LiveGamePanel* live_panel_ = nullptr;
     QTableView* standings_view_ = nullptr;

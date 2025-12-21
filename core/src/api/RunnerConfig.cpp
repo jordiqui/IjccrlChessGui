@@ -166,6 +166,37 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
         config.limits.max_games = root.value("max_games", config.limits.max_games);
     }
 
+    if (root.contains("adjudication")) {
+        const auto& node = root.at("adjudication");
+        config.adjudication.enabled = node.value("enabled", config.adjudication.enabled);
+        config.adjudication.score_draw_cp = node.value("score_draw_cp", config.adjudication.score_draw_cp);
+        config.adjudication.score_draw_moves = node.value("score_draw_moves", config.adjudication.score_draw_moves);
+        config.adjudication.score_win_cp = node.value("score_win_cp", config.adjudication.score_win_cp);
+        config.adjudication.score_win_moves = node.value("score_win_moves", config.adjudication.score_win_moves);
+        config.adjudication.min_depth = node.value("min_depth", config.adjudication.min_depth);
+    }
+
+    if (root.contains("tablebases")) {
+        const auto& node = root.at("tablebases");
+        config.tablebases.enabled = node.value("enabled", config.tablebases.enabled);
+        config.tablebases.probe_limit_pieces =
+            node.value("probe_limit_pieces", config.tablebases.probe_limit_pieces);
+        config.tablebases.paths.clear();
+        if (node.contains("paths")) {
+            for (const auto& path : node.at("paths")) {
+                config.tablebases.paths.push_back(path.get<std::string>());
+            }
+        }
+    }
+
+    if (root.contains("resign")) {
+        const auto& node = root.at("resign");
+        config.resign.enabled = node.value("enabled", config.resign.enabled);
+        config.resign.cp = node.value("cp", config.resign.cp);
+        config.resign.moves = node.value("moves", config.resign.moves);
+        config.resign.min_depth = node.value("min_depth", config.resign.min_depth);
+    }
+
     if (root.contains("watchdog")) {
         const auto& watchdog = root.at("watchdog");
         config.watchdog.handshake_timeout_ms =
@@ -240,6 +271,28 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
         {"max_games", config.limits.max_games},
         {"draw_by_repetition", config.limits.draw_by_repetition},
         {"abort_on_stop", config.limits.abort_on_stop},
+    };
+
+    root["adjudication"] = {
+        {"enabled", config.adjudication.enabled},
+        {"score_draw_cp", config.adjudication.score_draw_cp},
+        {"score_draw_moves", config.adjudication.score_draw_moves},
+        {"score_win_cp", config.adjudication.score_win_cp},
+        {"score_win_moves", config.adjudication.score_win_moves},
+        {"min_depth", config.adjudication.min_depth},
+    };
+
+    root["tablebases"] = {
+        {"enabled", config.tablebases.enabled},
+        {"paths", config.tablebases.paths},
+        {"probe_limit_pieces", config.tablebases.probe_limit_pieces},
+    };
+
+    root["resign"] = {
+        {"enabled", config.resign.enabled},
+        {"cp", config.resign.cp},
+        {"moves", config.resign.moves},
+        {"min_depth", config.resign.min_depth},
     };
 
     root["watchdog"] = {
@@ -318,6 +371,25 @@ std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
         {"max_games", config.limits.max_games},
         {"draw_by_repetition", config.limits.draw_by_repetition},
         {"abort_on_stop", config.limits.abort_on_stop},
+    };
+    root["adjudication"] = {
+        {"enabled", config.adjudication.enabled},
+        {"score_draw_cp", config.adjudication.score_draw_cp},
+        {"score_draw_moves", config.adjudication.score_draw_moves},
+        {"score_win_cp", config.adjudication.score_win_cp},
+        {"score_win_moves", config.adjudication.score_win_moves},
+        {"min_depth", config.adjudication.min_depth},
+    };
+    root["tablebases"] = {
+        {"enabled", config.tablebases.enabled},
+        {"paths", config.tablebases.paths},
+        {"probe_limit_pieces", config.tablebases.probe_limit_pieces},
+    };
+    root["resign"] = {
+        {"enabled", config.resign.enabled},
+        {"cp", config.resign.cp},
+        {"moves", config.resign.moves},
+        {"min_depth", config.resign.min_depth},
     };
     root["watchdog"] = {
         {"handshake_timeout_ms", config.watchdog.handshake_timeout_ms},
