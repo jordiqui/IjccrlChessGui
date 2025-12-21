@@ -6,6 +6,8 @@
 #include "ijccrl/core/uci/UciEngine.h"
 
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace ijccrl::core::game {
 
@@ -23,6 +25,8 @@ public:
                     const TimeControl& time_control,
                     int max_plies,
                     ijccrl::core::pgn::PgnGame pgn_template,
+                    const std::string& initial_fen,
+                    const std::vector<std::string>& opening_moves,
                     const LiveUpdateFn& live_update);
 };
 

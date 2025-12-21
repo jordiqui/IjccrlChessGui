@@ -1,0 +1,114 @@
+#include "ijccrl/core/runtime/MatchRunner.h"
+
+#include <algorithm>
+#include <thread>
+
+namespace {
+
+bool IsStartposFen(const std::string& fen) {
+    return fen == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+}
+
+}  // namespace
+
+namespace ijccrl::core::runtime {
+
+MatchRunner::MatchRunner(EnginePool& pool,
+                         ijccrl::core::game::TimeControl time_control,
+                         int max_plies,
+                         ResultCallback result_callback,
+                         LiveUpdateFn live_update)
+    : pool_(pool),
+      time_control_(time_control),
+      max_plies_(max_plies),
+      result_callback_(std::move(result_callback)),
+      live_update_(std::move(live_update)) {}
+
+void MatchRunner::Run(const std::vector<MatchJob>& jobs, int concurrency) {
+    if (jobs.empty()) {
+        return;
+    }
+
+    const int worker_count = std::max(1, concurrency);
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<size_t>(worker_count));
+    std::atomic<size_t> next_job{0};
+    std::atomic<int> game_counter{0};
+
+    for (int i = 0; i < worker_count; ++i) {
+        workers.emplace_back([&]() { RunWorker(jobs, next_job, game_counter); });
+    }
+
+    for (auto& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+}
+
+void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
+                            std::atomic<size_t>& next_job,
+                            std::atomic<int>& game_counter) {
+    ijccrl::core::game::GameRunner runner;
+
+    while (true) {
+        const size_t index = next_job.fetch_add(1);
+        if (index >= jobs.size()) {
+            return;
+        }
+
+        const auto& job = jobs[index];
+        auto lease = pool_.AcquirePair(job.fixture.white_engine_id,
+                                       job.fixture.black_engine_id);
+        auto& white = lease.white();
+        auto& black = lease.black();
+
+        white.NewGame();
+        black.NewGame();
+        white.IsReady();
+        black.IsReady();
+
+        ijccrl::core::pgn::PgnGame pgn;
+        pgn.SetTag("Event", job.event_name);
+        if (!job.site_tag.empty()) {
+            pgn.SetTag("Site", job.site_tag);
+        }
+        pgn.SetTag("Round", job.round_label);
+        pgn.SetTag("White", white.name());
+        pgn.SetTag("Black", black.name());
+        pgn.SetTag("Result", "*");
+        if (!job.opening.fen.empty() && !IsStartposFen(job.opening.fen)) {
+            pgn.SetTag("SetUp", "1");
+            pgn.SetTag("FEN", job.opening.fen);
+        }
+
+        const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
+            if (live_update_) {
+                live_update_(live_game);
+            }
+        };
+
+        auto result = runner.PlayGame(white,
+                                      black,
+                                      time_control_,
+                                      max_plies_,
+                                      pgn,
+                                      job.opening.fen,
+                                      job.opening.moves,
+                                      live_update);
+
+        if (!white.IsRunning()) {
+            pool_.RestartEngine(job.fixture.white_engine_id);
+        }
+        if (!black.IsRunning()) {
+            pool_.RestartEngine(job.fixture.black_engine_id);
+        }
+
+        MatchResult payload{job, result, game_counter.fetch_add(1) + 1};
+        if (result_callback_) {
+            result_callback_(payload);
+        }
+    }
+}
+
+}  // namespace ijccrl::core::runtime
