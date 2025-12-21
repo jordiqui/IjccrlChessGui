@@ -1,10 +1,3 @@
-Aquí tienes un **README.md completo (copy/paste)** para que GitHub te deje crear el repo `jordiqui/IjccrlChessGui` y, a la vez, marque desde el minuto 1 el objetivo “ChessGUI-like”: **torneos + retransmisión web en tiempo real** (TLCS/TLCV/node-tlcv), con compilación en **Windows (MinGW64/clang++)** o ejecución híbrida con **VPS Ubuntu**.
-
-> Está basado en lo que describe ChessProgramming sobre ChessGUI (broadcast vía TLCV) y en el README oficial de `jhonnold/node-tlcv` (config, `.env`, puerto 8080, panel `/admin`). ([chessprogramming.org][1])
-
----
-
-````markdown
 # IJCCRL Chess GUI (IjccrlChessGui)
 
 **IjccrlChessGui** is an open, modern **engine-tournament framework + live broadcast pipeline** inspired by the historical “ChessGUI” concept:  
@@ -207,13 +200,3 @@ Upstream components keep their own licenses; this repo will not relicense third-
 Jorge Ruiz Centelles (jordiqui)
 IJCCRL — International Jorge Chess Computer Rating List
 
-```
-
----
-
-Si quieres, en el siguiente paso te dejo **la estructura inicial de carpetas + ficheros vacíos** (y un `docs/00-architecture.md`) para que el repo no nazca “solo con README”, sino con el esqueleto exacto del framework IJCCRL (y listo para que Codex empiece a commitear).
-::contentReference[oaicite:7]{index=7}
-```
-
-[1]: https://www.chessprogramming.org/ChessGUI?utm_source=chatgpt.com "ChessGUI"
-[2]: https://github.com/jhonnold/node-tlcv?utm_source=chatgpt.com "jhonnold/node-tlcv: Tom's Live Chess Viewer for CCRL ..."
