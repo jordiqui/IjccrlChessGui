@@ -12,6 +12,7 @@
 #include "ijccrl/core/runtime/MatchRunner.h"
 #include "ijccrl/core/stats/StandingsTable.h"
 #include "ijccrl/core/tournament/RoundRobinScheduler.h"
+#include "ijccrl/core/tournament/SwissScheduler.h"
 #include "ijccrl/core/util/AtomicFileWriter.h"
 
 #include <nlohmann/json.hpp>
@@ -234,6 +235,556 @@ int main(int argc, char** argv) {
     if (opening_config.seed != 0) {
         std::mt19937 rng(static_cast<uint32_t>(opening_config.seed));
         std::shuffle(openings.begin(), openings.end(), rng);
+    }
+
+    if (tournament.mode == "swiss") {
+        const std::string event_name = "ijccrl swiss";
+        const int engine_count = static_cast<int>(engine_names.size());
+        const int games_per_pairing = std::max(1, tournament.games_per_pairing);
+        const int fixtures_per_round = (engine_count / 2) * games_per_pairing;
+        int total_rounds = std::max(1, tournament.rounds);
+        if (max_games > 0 && fixtures_per_round > 0) {
+            const int max_rounds = max_games / fixtures_per_round;
+            if (max_rounds > 0) {
+                total_rounds = std::min(total_rounds, max_rounds);
+            }
+        }
+        const int total_games = fixtures_per_round * total_rounds;
+        std::atomic<bool> stop_requested{false};
+        std::atomic<bool> paused{false};
+        std::mutex pause_mutex;
+        std::condition_variable pause_cv;
+
+        ijccrl::core::persist::CheckpointState checkpoint_state;
+        const std::string checkpoint_path = output_config.checkpoint_json;
+        const std::string config_hash =
+            ijccrl::core::persist::ComputeConfigHash(RunnerConfig::ToJsonString(runner_config));
+        bool has_checkpoint = false;
+        if (resume && !fresh && std::filesystem::exists(checkpoint_path)) {
+            std::string error;
+            if (ijccrl::core::persist::LoadCheckpoint(checkpoint_path, checkpoint_state, &error)) {
+                if (checkpoint_state.config_hash == config_hash) {
+                    has_checkpoint = true;
+                    std::cout << "[ijccrlcli] Resuming from checkpoint." << '\n';
+                    if (!checkpoint_state.active_games.empty()) {
+                        std::cout << "[ijccrlcli] Active games will be restarted on resume." << '\n';
+                    }
+                } else {
+                    std::cout << "[ijccrlcli] Checkpoint config mismatch; starting fresh." << '\n';
+                }
+            } else {
+                std::cout << "[ijccrlcli] Failed to load checkpoint: " << error << '\n';
+            }
+        }
+
+        std::vector<int> completed_fixture_indices;
+        std::vector<ijccrl::core::persist::CompletedGameMeta> completed_games;
+        int initial_game_number = 0;
+        int current_round = 0;
+        int next_fixture_index = 0;
+        std::vector<int> bye_history;
+        std::vector<ijccrl::core::persist::CheckpointState::SwissPairing> pairings_played;
+        std::vector<ijccrl::core::tournament::SwissColorState> color_history(
+            static_cast<size_t>(engine_count));
+
+        if (has_checkpoint) {
+            completed_fixture_indices = checkpoint_state.completed_fixture_indices;
+            completed_games = checkpoint_state.completed_games;
+            initial_game_number = checkpoint_state.last_game_no;
+            current_round = checkpoint_state.swiss.current_round;
+            next_fixture_index = checkpoint_state.next_fixture_index;
+            bye_history = checkpoint_state.swiss.bye_history;
+            pairings_played = checkpoint_state.swiss.pairings_played;
+            if (!checkpoint_state.swiss.color_history.empty()) {
+                color_history.clear();
+                for (const auto& entry : checkpoint_state.swiss.color_history) {
+                    ijccrl::core::tournament::SwissColorState state;
+                    state.last_color = entry.last_color;
+                    state.streak = entry.streak;
+                    color_history.push_back(state);
+                }
+            }
+        }
+
+        std::unordered_set<int> completed_set(completed_fixture_indices.begin(),
+                                              completed_fixture_indices.end());
+        std::atomic<int> completed_count{static_cast<int>(completed_set.size())};
+
+        std::unordered_set<long long> pairings_played_set;
+        std::vector<std::vector<int>> opponent_history(static_cast<size_t>(engine_count));
+        for (const auto& pairing : pairings_played) {
+            const int white = pairing.white_engine_id;
+            const int black = pairing.black_engine_id;
+            if (white < 0 || black < 0 || white >= engine_count || black >= engine_count) {
+                continue;
+            }
+            const long long key = (static_cast<long long>(std::min(white, black)) << 32) |
+                                  static_cast<unsigned int>(std::max(white, black));
+            pairings_played_set.insert(key);
+            opponent_history[static_cast<size_t>(white)].push_back(black);
+            opponent_history[static_cast<size_t>(black)].push_back(white);
+        }
+
+        ijccrl::core::stats::StandingsTable standings(engine_names);
+        if (has_checkpoint && !checkpoint_state.standings.empty()) {
+            std::vector<ijccrl::core::stats::EngineStats> snapshot;
+            snapshot.reserve(engine_names.size());
+            std::unordered_map<std::string, ijccrl::core::persist::StandingsSnapshot> by_name;
+            for (const auto& entry : checkpoint_state.standings) {
+                by_name.emplace(entry.name, entry);
+            }
+            for (const auto& name : engine_names) {
+                ijccrl::core::stats::EngineStats stats;
+                stats.name = name;
+                auto it = by_name.find(name);
+                if (it != by_name.end()) {
+                    stats.games = it->second.games;
+                    stats.wins = it->second.wins;
+                    stats.draws = it->second.draws;
+                    stats.losses = it->second.losses;
+                    stats.points = it->second.points;
+                }
+                snapshot.push_back(std::move(stats));
+            }
+            standings.LoadSnapshot(snapshot);
+        }
+
+        struct PendingFixture {
+            ijccrl::core::tournament::Fixture fixture;
+            int fixture_index = 0;
+        };
+
+        std::vector<PendingFixture> pending_fixtures;
+        if (has_checkpoint) {
+            pending_fixtures.reserve(checkpoint_state.swiss.pending_pairings_current_round.size());
+            for (const auto& pending : checkpoint_state.swiss.pending_pairings_current_round) {
+                pending_fixtures.push_back({pending.fixture, pending.fixture_index});
+            }
+        }
+
+        std::unordered_map<long long, int> pairing_games_completed;
+        std::unordered_map<long long, int> pairing_games_total;
+        if (!pending_fixtures.empty()) {
+            std::unordered_map<long long, int> pending_counts;
+            for (const auto& pending : pending_fixtures) {
+                const int white = pending.fixture.white_engine_id;
+                const int black = pending.fixture.black_engine_id;
+                const long long key = (static_cast<long long>(std::min(white, black)) << 32) |
+                                      static_cast<unsigned int>(std::max(white, black));
+                pending_counts[key] += 1;
+            }
+            for (const auto& entry : pending_counts) {
+                pairing_games_total[entry.first] = games_per_pairing;
+                pairing_games_completed[entry.first] = games_per_pairing - entry.second;
+            }
+        }
+
+        std::mutex output_mutex;
+        std::mutex checkpoint_mutex;
+        std::vector<ijccrl::core::persist::ActiveGameMeta> active_games_meta;
+
+        std::atomic<int> active_games{0};
+        std::atomic<int> last_game_number{0};
+        std::atomic<std::time_t> last_game_end_time{0};
+        std::atomic<int> disk_write_errors{0};
+
+        const auto live_update = [&](const ijccrl::core::pgn::PgnGame& live_game) {
+            const std::string live_pgn = ijccrl::core::pgn::PgnWriter::Render(live_game);
+            if (adapter) {
+                adapter->PublishLivePgn(live_pgn);
+            }
+            if (!WriteLivePgn(output_config.live_pgn, live_pgn)) {
+                disk_write_errors.fetch_add(1);
+            }
+        };
+
+        const auto on_job_event = [&](const ijccrl::core::runtime::MatchJob& job,
+                                      int game_number,
+                                      bool started) {
+            if (started) {
+                active_games.fetch_add(1);
+                std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
+                ijccrl::core::persist::ActiveGameMeta active;
+                active.game_no = game_number;
+                active.fixture_index = job.fixture_index;
+                active.white = engine_names[static_cast<size_t>(job.fixture.white_engine_id)];
+                active.black = engine_names[static_cast<size_t>(job.fixture.black_engine_id)];
+                active.opening_id = job.opening.id;
+                active_games_meta.push_back(std::move(active));
+            } else {
+                active_games.fetch_sub(1);
+                std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
+                active_games_meta.erase(std::remove_if(active_games_meta.begin(),
+                                                       active_games_meta.end(),
+                                                       [&](const auto& entry) {
+                                                           return entry.game_no == game_number;
+                                                       }),
+                                        active_games_meta.end());
+            }
+        };
+
+        std::function<void()> write_checkpoint;
+        const auto on_result = [&](const ijccrl::core::runtime::MatchResult& result) {
+            const auto& fixture = result.job.fixture;
+            const std::string final_pgn = ijccrl::core::pgn::PgnWriter::Render(result.result.pgn);
+            long long pgn_offset = 0;
+            {
+                const std::filesystem::path fs_path(output_config.tournament_pgn);
+                if (std::filesystem::exists(fs_path)) {
+                    pgn_offset = static_cast<long long>(std::filesystem::file_size(fs_path));
+                }
+            }
+
+            std::lock_guard<std::mutex> lock(output_mutex);
+            if (!AppendTournamentPgn(output_config.tournament_pgn, final_pgn)) {
+                disk_write_errors.fetch_add(1);
+            }
+
+            standings.RecordResult(fixture.white_engine_id, fixture.black_engine_id, result.result.state.result);
+
+            const auto update_color = [&](int engine_id, int color) {
+                auto& state = color_history[static_cast<size_t>(engine_id)];
+                if (state.last_color == color) {
+                    state.streak += 1;
+                } else {
+                    state.last_color = color;
+                    state.streak = 1;
+                }
+            };
+            update_color(fixture.white_engine_id, 1);
+            update_color(fixture.black_engine_id, -1);
+
+            const long long pairing_key = (static_cast<long long>(std::min(fixture.white_engine_id,
+                                                                           fixture.black_engine_id))
+                                           << 32) |
+                                          static_cast<unsigned int>(std::max(fixture.white_engine_id,
+                                                                             fixture.black_engine_id));
+            const int completed = ++pairing_games_completed[pairing_key];
+            const int total = pairing_games_total[pairing_key];
+            if (completed == total && pairings_played_set.insert(pairing_key).second) {
+                ijccrl::core::persist::CheckpointState::SwissPairing entry;
+                entry.white_engine_id = std::min(fixture.white_engine_id, fixture.black_engine_id);
+                entry.black_engine_id = std::max(fixture.white_engine_id, fixture.black_engine_id);
+                pairings_played.push_back(entry);
+                opponent_history[static_cast<size_t>(fixture.white_engine_id)].push_back(fixture.black_engine_id);
+                opponent_history[static_cast<size_t>(fixture.black_engine_id)].push_back(fixture.white_engine_id);
+            }
+
+            pending_fixtures.erase(std::remove_if(pending_fixtures.begin(),
+                                                  pending_fixtures.end(),
+                                                  [&](const auto& pending) {
+                                                      return pending.fixture_index == result.job.fixture_index;
+                                                  }),
+                                   pending_fixtures.end());
+            if (pending_fixtures.empty()) {
+                current_round += 1;
+                pairing_games_completed.clear();
+                pairing_games_total.clear();
+            }
+
+            std::ostringstream csv_line;
+            csv_line << result.game_number << ','
+                     << (fixture.round_index + 1) << ','
+                     << engine_names[static_cast<size_t>(fixture.white_engine_id)] << ','
+                     << engine_names[static_cast<size_t>(fixture.black_engine_id)] << ','
+                     << result.job.opening.id << ','
+                     << result.job.opening.fen << ','
+                     << result.result.state.result << ','
+                     << result.result.state.termination << ','
+                     << output_config.tournament_pgn;
+            if (!AppendCsvLine(output_config.pairings_csv, csv_line.str(), true)) {
+                disk_write_errors.fetch_add(1);
+            }
+
+            std::ostringstream log_line;
+            log_line << "GAME END #" << result.game_number << " | "
+                     << engine_names[static_cast<size_t>(fixture.white_engine_id)] << " vs "
+                     << engine_names[static_cast<size_t>(fixture.black_engine_id)] << " | "
+                     << result.result.state.result << " | term="
+                     << result.result.state.termination << " | opening="
+                     << result.job.opening.id;
+            std::cout << log_line.str() << '\n';
+            if (!AppendLogLine(output_config.progress_log, log_line.str())) {
+                disk_write_errors.fetch_add(1);
+            }
+
+            nlohmann::json results_json;
+            results_json["event"] = event_name;
+            std::ostringstream tc_desc;
+            tc_desc << runner_config.time_control.base_seconds << "+"
+                    << runner_config.time_control.increment_seconds;
+            results_json["tc"] = tc_desc.str();
+            results_json["mode"] = tournament.mode;
+            results_json["games_played"] = standings.games_played();
+            results_json["standings"] = nlohmann::json::array();
+            for (const auto& entry : standings.standings()) {
+                results_json["standings"].push_back({
+                    {"name", entry.name},
+                    {"pts", entry.points},
+                    {"g", entry.games},
+                    {"w", entry.wins},
+                    {"d", entry.draws},
+                    {"l", entry.losses},
+                });
+            }
+            if (!ijccrl::core::util::AtomicFileWriter::Write(output_config.results_json,
+                                                             results_json.dump(2))) {
+                disk_write_errors.fetch_add(1);
+            }
+
+            ijccrl::core::exporter::WriteStandingsCsv(output_config.standings_csv, standings.standings());
+            ijccrl::core::exporter::WriteStandingsHtml(output_config.standings_html,
+                                                       event_name,
+                                                       standings.standings());
+            ijccrl::core::exporter::WriteSummaryJson(output_config.summary_json,
+                                                     event_name,
+                                                     tc_desc.str(),
+                                                     tournament.mode,
+                                                     total_games,
+                                                     standings.standings());
+
+            {
+                std::lock_guard<std::mutex> checkpoint_lock(checkpoint_mutex);
+                ijccrl::core::persist::CompletedGameMeta meta;
+                meta.game_no = result.game_number;
+                meta.fixture_index = result.job.fixture_index;
+                meta.white = engine_names[static_cast<size_t>(fixture.white_engine_id)];
+                meta.black = engine_names[static_cast<size_t>(fixture.black_engine_id)];
+                meta.opening_id = result.job.opening.id;
+                meta.result = result.result.state.result;
+                meta.termination = result.result.state.termination;
+                meta.pgn_offset = pgn_offset;
+                meta.pgn_path = output_config.tournament_pgn;
+                completed_games.push_back(std::move(meta));
+                completed_set.insert(result.job.fixture_index);
+                completed_count.store(static_cast<int>(completed_set.size()));
+            }
+            last_game_number.store(result.game_number);
+            last_game_end_time.store(std::time(nullptr));
+            if (write_checkpoint) {
+                write_checkpoint();
+            }
+        };
+
+        ijccrl::core::runtime::MatchRunner::Control control;
+        control.stop = &stop_requested;
+        control.paused = &paused;
+        control.pause_mutex = &pause_mutex;
+        control.pause_cv = &pause_cv;
+
+        const auto watchdog_log = [](const std::string& line) {
+            std::cout << line << '\n';
+        };
+
+        write_checkpoint = [&]() {
+            ijccrl::core::persist::CheckpointState snapshot;
+            snapshot.version = 2;
+            snapshot.config_hash = config_hash;
+            snapshot.total_games = total_games;
+            snapshot.next_fixture_index = next_fixture_index;
+            snapshot.opening_index = next_fixture_index;
+            snapshot.rng_seed = static_cast<std::uint64_t>(opening_config.seed);
+            snapshot.last_game_no = last_game_number.load();
+            std::time_t last_time = last_game_end_time.load();
+            snapshot.last_game_end_time = last_time == 0 ? "" : FormatUtcTimestamp(last_time);
+            snapshot.swiss.current_round = current_round;
+            snapshot.swiss.bye_history = bye_history;
+            snapshot.swiss.pairings_played = pairings_played;
+
+            snapshot.swiss.color_history.clear();
+            for (const auto& entry : color_history) {
+                ijccrl::core::persist::CheckpointState::SwissColorSnapshot color_entry;
+                color_entry.last_color = entry.last_color;
+                color_entry.streak = entry.streak;
+                snapshot.swiss.color_history.push_back(color_entry);
+            }
+
+            std::vector<int> completed_snapshot;
+            {
+                std::lock_guard<std::mutex> lock(checkpoint_mutex);
+                snapshot.completed_games = completed_games;
+                snapshot.active_games = active_games_meta;
+                completed_snapshot.assign(completed_set.begin(), completed_set.end());
+            }
+            snapshot.completed_fixture_indices = completed_snapshot;
+
+            if (!pending_fixtures.empty()) {
+                const auto& pending = pending_fixtures.front();
+                snapshot.next_game.fixture_index = pending.fixture_index;
+                snapshot.next_game.white =
+                    engine_names[static_cast<size_t>(pending.fixture.white_engine_id)];
+                snapshot.next_game.black =
+                    engine_names[static_cast<size_t>(pending.fixture.black_engine_id)];
+                snapshot.next_game.opening_id =
+                    ijccrl::core::openings::OpeningPolicy::AssignSwissForIndex(
+                        pending.fixture_index, openings, games_per_pairing)
+                        .id;
+            }
+
+            snapshot.swiss.pending_pairings_current_round.clear();
+            for (const auto& pending : pending_fixtures) {
+                ijccrl::core::persist::CheckpointState::SwissPendingFixture entry;
+                entry.fixture = pending.fixture;
+                entry.fixture_index = pending.fixture_index;
+                snapshot.swiss.pending_pairings_current_round.push_back(std::move(entry));
+            }
+
+            snapshot.standings.clear();
+            for (const auto& row : standings.standings()) {
+                ijccrl::core::persist::StandingsSnapshot entry;
+                entry.name = row.name;
+                entry.games = row.games;
+                entry.wins = row.wins;
+                entry.draws = row.draws;
+                entry.losses = row.losses;
+                entry.points = row.points;
+                snapshot.standings.push_back(std::move(entry));
+            }
+
+            if (!ijccrl::core::persist::SaveCheckpoint(checkpoint_path, snapshot)) {
+                disk_write_errors.fetch_add(1);
+            }
+        };
+
+        std::atomic<bool> checkpoint_running{false};
+        std::thread checkpoint_thread;
+        if (output_config.checkpoint_interval_seconds > 0) {
+            checkpoint_running.store(true);
+            checkpoint_thread = std::thread([&]() {
+                while (checkpoint_running.load()) {
+                    std::this_thread::sleep_for(std::chrono::seconds(output_config.checkpoint_interval_seconds));
+                    write_checkpoint();
+                }
+            });
+        }
+
+        std::atomic<bool> metrics_running{false};
+        std::thread metrics_thread;
+        if (output_config.metrics_interval_seconds > 0) {
+            metrics_running.store(true);
+            metrics_thread = std::thread([&]() {
+                while (metrics_running.load()) {
+                    std::this_thread::sleep_for(std::chrono::seconds(output_config.metrics_interval_seconds));
+                    nlohmann::json metrics;
+                    metrics["active_games"] = active_games.load();
+                    metrics["queue_remaining"] = total_games - completed_count.load();
+                    metrics["total_games"] = total_games;
+                    metrics["engines_running"] = static_cast<int>(engine_names.size());
+                    std::time_t last_time = last_game_end_time.load();
+                    metrics["last_game_end_time"] = last_time == 0 ? "" : FormatUtcTimestamp(last_time);
+                    metrics["disk_write_errors_count"] = disk_write_errors.load();
+                    if (!ijccrl::core::util::AtomicFileWriter::Write(output_config.metrics_json,
+                                                                     metrics.dump(2))) {
+                        disk_write_errors.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        ijccrl::core::runtime::MatchRunner match_runner(pool,
+                                                        time_control,
+                                                        max_plies,
+                                                        runner_config.watchdog.go_timeout_ms,
+                                                        runner_config.limits.abort_on_stop,
+                                                        runner_config.watchdog.max_failures,
+                                                        runner_config.watchdog.failure_window_games,
+                                                        runner_config.watchdog.pause_on_unhealthy,
+                                                        on_result,
+                                                        live_update,
+                                                        watchdog_log,
+                                                        on_job_event);
+
+        write_checkpoint();
+
+        while (current_round < total_rounds && !stop_requested.load()) {
+            std::vector<ijccrl::core::runtime::MatchJob> jobs;
+            if (pending_fixtures.empty()) {
+                std::vector<double> scores;
+                scores.reserve(engine_count);
+                for (const auto& entry : standings.standings()) {
+                    scores.push_back(entry.points);
+                }
+
+                ijccrl::core::tournament::SwissScheduler scheduler;
+                const auto swiss_round = scheduler.BuildSwissRound(current_round,
+                                                                   scores,
+                                                                   opponent_history,
+                                                                   bye_history,
+                                                                   color_history,
+                                                                   pairings_played_set,
+                                                                   games_per_pairing,
+                                                                   tournament.avoid_repeats);
+
+                const int bye_engine = swiss_round.round.bye_engine_id.value_or(-1);
+                if (bye_engine >= 0) {
+                    if (tournament.bye_points > 0.0) {
+                        standings.RecordBye(bye_engine, tournament.bye_points);
+                    }
+                    bye_history.push_back(bye_engine);
+                    std::cout << "[ijccrlcli] Swiss bye: "
+                              << engine_names[static_cast<size_t>(bye_engine)] << '\n';
+                }
+
+                for (const auto& pairing : swiss_round.pairings) {
+                    const long long key = (static_cast<long long>(std::min(pairing.first, pairing.second)) << 32) |
+                                          static_cast<unsigned int>(std::max(pairing.first, pairing.second));
+                    pairing_games_total[key] = games_per_pairing;
+                }
+
+                pending_fixtures.clear();
+                for (const auto& fixture : swiss_round.round.fixtures) {
+                    PendingFixture pending;
+                    pending.fixture = fixture;
+                    pending.fixture_index = next_fixture_index++;
+                    pending_fixtures.push_back(pending);
+                }
+            }
+
+            jobs.reserve(pending_fixtures.size());
+            for (const auto& pending : pending_fixtures) {
+                if (completed_set.count(pending.fixture_index) > 0) {
+                    continue;
+                }
+                ijccrl::core::runtime::MatchJob job;
+                job.fixture = pending.fixture;
+                job.opening = ijccrl::core::openings::OpeningPolicy::AssignSwissForIndex(
+                    pending.fixture_index, openings, games_per_pairing);
+                job.event_name = event_name;
+                job.site_tag = site_tag;
+                job.round_label = std::to_string(pending.fixture.round_index + 1);
+                job.fixture_index = pending.fixture_index;
+                jobs.push_back(std::move(job));
+            }
+
+            if (jobs.empty()) {
+                current_round += 1;
+                pending_fixtures.clear();
+                continue;
+            }
+
+            match_runner.Run(jobs, tournament.concurrency, control, initial_game_number);
+            initial_game_number = last_game_number.load();
+        }
+
+        for (size_t i = 0; i < engine_names.size(); ++i) {
+            pool.engine(static_cast<int>(i)).Stop();
+        }
+
+        write_checkpoint();
+        if (checkpoint_running.load()) {
+            checkpoint_running.store(false);
+            if (checkpoint_thread.joinable()) {
+                checkpoint_thread.join();
+            }
+        }
+        if (metrics_running.load()) {
+            metrics_running.store(false);
+            if (metrics_thread.joinable()) {
+                metrics_thread.join();
+            }
+        }
+
+        return 0;
     }
 
     auto fixtures = ijccrl::core::tournament::RoundRobinScheduler::BuildSchedule(

@@ -26,6 +26,7 @@ public:
     explicit StandingsTable(std::vector<std::string> engine_names);
 
     void RecordResult(int white_id, int black_id, const std::string& result);
+    void RecordBye(int engine_id, double points);
     void LoadSnapshot(std::vector<EngineStats> snapshot);
     const std::vector<EngineStats>& standings() const { return standings_; }
     int games_played() const { return games_played_; }

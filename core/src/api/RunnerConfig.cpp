@@ -117,6 +117,8 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
         config.tournament.rounds = node.value("rounds", config.tournament.rounds);
         config.tournament.games_per_pairing = node.value("games_per_pairing", config.tournament.games_per_pairing);
         config.tournament.concurrency = node.value("concurrency", config.tournament.concurrency);
+        config.tournament.avoid_repeats = node.value("avoid_repeats", config.tournament.avoid_repeats);
+        config.tournament.bye_points = node.value("bye_points", config.tournament.bye_points);
     }
 
     if (root.contains("openings")) {
@@ -200,6 +202,8 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
         {"rounds", config.tournament.rounds},
         {"games_per_pairing", config.tournament.games_per_pairing},
         {"concurrency", config.tournament.concurrency},
+        {"avoid_repeats", config.tournament.avoid_repeats},
+        {"bye_points", config.tournament.bye_points},
     };
 
     root["openings"] = {
@@ -280,6 +284,8 @@ std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
         {"rounds", config.tournament.rounds},
         {"games_per_pairing", config.tournament.games_per_pairing},
         {"concurrency", config.tournament.concurrency},
+        {"avoid_repeats", config.tournament.avoid_repeats},
+        {"bye_points", config.tournament.bye_points},
     };
     root["openings"] = {
         {"type", config.openings.type},

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "ijccrl/core/tournament/TournamentTypes.h"
+
 namespace ijccrl::core::persist {
 
 struct CompletedGameMeta {
@@ -56,6 +58,31 @@ struct CheckpointState {
     std::uint64_t rng_seed = 0;
     int last_game_no = 0;
     std::string last_game_end_time;
+
+    struct SwissPairing {
+        int white_engine_id = -1;
+        int black_engine_id = -1;
+    };
+
+    struct SwissColorSnapshot {
+        int last_color = 0;
+        int streak = 0;
+    };
+
+    struct SwissPendingFixture {
+        ijccrl::core::tournament::Fixture fixture;
+        int fixture_index = 0;
+    };
+
+    struct SwissCheckpointState {
+        int current_round = 0;
+        std::vector<SwissPairing> pairings_played;
+        std::vector<int> bye_history;
+        std::vector<SwissColorSnapshot> color_history;
+        std::vector<SwissPendingFixture> pending_pairings_current_round;
+    };
+
+    SwissCheckpointState swiss;
 };
 
 std::string ComputeConfigHash(const std::string& payload);

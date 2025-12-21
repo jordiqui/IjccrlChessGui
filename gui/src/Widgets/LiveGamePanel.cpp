@@ -1,5 +1,6 @@
 #include "Widgets/LiveGamePanel.h"
 
+#include <QAbstractItemView>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -15,6 +16,9 @@ LiveGamePanel::LiveGamePanel(QWidget* parent)
     last_move_label_ = new QLabel("Last move: -", this);
     live_pgn_label_ = new QLabel("Live PGN: -", this);
     tlcs_label_ = new QLabel("TLCS mode: -", this);
+    pairings_list_ = new QListWidget(this);
+    pairings_list_->setMinimumHeight(120);
+    pairings_list_->setSelectionMode(QAbstractItemView::NoSelection);
 
     open_live_pgn_button_ = new QPushButton("Open live.pgn", this);
     connect(open_live_pgn_button_, &QPushButton::clicked, this, &LiveGamePanel::handleOpenLivePgn);
@@ -24,6 +28,8 @@ LiveGamePanel::LiveGamePanel(QWidget* parent)
     layout->addWidget(black_label_);
     layout->addWidget(opening_label_);
     layout->addWidget(last_move_label_);
+    layout->addWidget(new QLabel("Current round pairings:", this));
+    layout->addWidget(pairings_list_);
 
     auto* live_layout = new QHBoxLayout();
     live_layout->addWidget(live_pgn_label_, 1);
@@ -39,7 +45,9 @@ void LiveGamePanel::updateState(const ijccrl::core::api::RunnerState& state, boo
 
     status_label_->setText(QString("Game: %1 | Round: %2 | Active: %3")
                                .arg(state.gameNo)
-                               .arg(state.roundNo)
+                               .arg(state.totalRounds > 0
+                                        ? QString("%1 / %2").arg(state.roundNo).arg(state.totalRounds)
+                                        : QString::number(state.roundNo))
                                .arg(state.activeGames));
     white_label_->setText(QString("White: %1").arg(QString::fromStdString(state.whiteName)));
     black_label_->setText(QString("Black: %1").arg(QString::fromStdString(state.blackName)));
@@ -50,6 +58,11 @@ void LiveGamePanel::updateState(const ijccrl::core::api::RunnerState& state, boo
         tlcs_label_->setText("TLCS mode: writing TOURNEYPGN");
     } else {
         tlcs_label_->setText("TLCS mode: -");
+    }
+
+    pairings_list_->clear();
+    for (const auto& pairing : state.currentRoundPairings) {
+        pairings_list_->addItem(QString::fromStdString(pairing));
     }
 }
 

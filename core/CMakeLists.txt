@@ -15,6 +15,7 @@ add_library(ijccrlcore
     src/runtime/MatchRunner.cpp
     src/stats/StandingsTable.cpp
     src/tournament/RoundRobinScheduler.cpp
+    src/tournament/SwissScheduler.cpp
     src/uci/UciEngine.cpp
     src/util/AtomicFileWriter.cpp
 )

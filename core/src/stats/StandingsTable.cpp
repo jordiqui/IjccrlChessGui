@@ -40,6 +40,18 @@ void StandingsTable::RecordResult(int white_id, int black_id, const std::string&
     }
 }
 
+void StandingsTable::RecordBye(int engine_id, double points) {
+    if (engine_id < 0 || engine_id >= static_cast<int>(standings_.size())) {
+        return;
+    }
+    auto& entry = standings_[static_cast<size_t>(engine_id)];
+    entry.games += 1;
+    entry.wins += points >= 1.0 ? 1 : 0;
+    entry.draws += points > 0.0 && points < 1.0 ? 1 : 0;
+    entry.points += points;
+    games_played_ += 1;
+}
+
 void StandingsTable::LoadSnapshot(std::vector<EngineStats> snapshot) {
     standings_ = std::move(snapshot);
     int total_engine_games = 0;
