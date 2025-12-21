@@ -6,6 +6,7 @@ target_link_libraries(ijccrlcli PRIVATE ijccrlcore)
 
 target_include_directories(ijccrlcli PRIVATE
     ${CMAKE_SOURCE_DIR}/core/include
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 if(MSVC)
