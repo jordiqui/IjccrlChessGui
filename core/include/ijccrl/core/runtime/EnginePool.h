@@ -55,6 +55,7 @@ public:
     void ReleasePair(int white_id, int black_id);
     bool RestartEngine(int engine_id);
     void set_handshake_timeout_ms(int timeout_ms) { handshake_timeout_ms_ = timeout_ms; }
+    void set_watchdog_enabled(bool enabled) { watchdog_enabled_ = enabled; }
 
     ijccrl::core::uci::UciEngine& engine(int engine_id);
     const std::vector<EngineSpec>& specs() const { return specs_; }
@@ -67,6 +68,7 @@ private:
     std::vector<bool> busy_;
     std::string working_dir_;
     int handshake_timeout_ms_ = 10000;
+    bool watchdog_enabled_ = true;
     std::function<void(const std::string&)> log_fn_{};
     std::mutex mutex_;
     std::condition_variable cv_;

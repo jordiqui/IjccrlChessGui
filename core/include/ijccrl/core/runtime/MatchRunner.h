@@ -53,6 +53,7 @@ public:
                 ijccrl::core::rules::ConfigLimits termination_limits,
                 int go_timeout_ms,
                 bool abort_on_stop,
+                bool watchdog_enabled,
                 int max_failures,
                 int failure_window_games,
                 bool pause_on_unhealthy,
@@ -81,6 +82,7 @@ private:
     ijccrl::core::rules::ConfigLimits termination_limits_{};
     int go_timeout_ms_ = 0;
     bool abort_on_stop_ = true;
+    bool watchdog_enabled_ = true;
     int max_failures_ = 0;
     int failure_window_games_ = 0;
     bool pause_on_unhealthy_ = false;

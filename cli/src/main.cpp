@@ -228,6 +228,14 @@ int main(int argc, char** argv) {
         std::move(specs),
         [](const std::string& line) { std::cout << line << '\n'; });
     pool.set_handshake_timeout_ms(runner_config.watchdog.handshake_timeout_ms);
+    pool.set_watchdog_enabled(runner_config.watchdog.enabled);
+    {
+        std::ostringstream message;
+        message << "[watchdog] enabled=" << std::boolalpha << runner_config.watchdog.enabled
+                << " handshake_timeout_ms=" << runner_config.watchdog.handshake_timeout_ms
+                << " go_timeout_ms=" << runner_config.watchdog.go_timeout_ms;
+        std::cout << message.str() << '\n';
+    }
     if (!pool.StartAll("")) {
         std::cerr << "[ijccrlcli] Failed to start engine pool." << '\n';
         return 1;
@@ -744,6 +752,7 @@ int main(int argc, char** argv) {
                                                         termination_limits,
                                                         runner_config.watchdog.go_timeout_ms,
                                                         runner_config.limits.abort_on_stop,
+                                                        runner_config.watchdog.enabled,
                                                         runner_config.watchdog.max_failures,
                                                         runner_config.watchdog.failure_window_games,
                                                         runner_config.watchdog.pause_on_unhealthy,
@@ -1247,6 +1256,7 @@ int main(int argc, char** argv) {
                                                     termination_limits,
                                                     runner_config.watchdog.go_timeout_ms,
                                                     runner_config.limits.abort_on_stop,
+                                                    runner_config.watchdog.enabled,
                                                     runner_config.watchdog.max_failures,
                                                     runner_config.watchdog.failure_window_games,
                                                     runner_config.watchdog.pause_on_unhealthy,
