@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -62,7 +63,7 @@ private:
     bool InitializeEngine(int engine_id);
 
     std::vector<EngineSpec> specs_;
-    std::vector<ijccrl::core::uci::UciEngine> engines_;
+    std::vector<std::unique_ptr<ijccrl::core::uci::UciEngine>> engines_;
     std::vector<bool> busy_;
     std::string working_dir_;
     int handshake_timeout_ms_ = 10000;

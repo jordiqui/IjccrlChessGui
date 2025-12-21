@@ -681,9 +681,26 @@ int main(int argc, char** argv) {
             });
         }
 
+        ijccrl::core::rules::ConfigLimits termination_limits;
+        termination_limits.max_plies = max_plies;
+        termination_limits.draw_by_repetition = runner_config.limits.draw_by_repetition;
+        termination_limits.adjudication.enabled = runner_config.adjudication.enabled;
+        termination_limits.adjudication.score_draw_cp = runner_config.adjudication.score_draw_cp;
+        termination_limits.adjudication.score_draw_moves = runner_config.adjudication.score_draw_moves;
+        termination_limits.adjudication.score_win_cp = runner_config.adjudication.score_win_cp;
+        termination_limits.adjudication.score_win_moves = runner_config.adjudication.score_win_moves;
+        termination_limits.adjudication.min_depth = runner_config.adjudication.min_depth;
+        termination_limits.tablebases.enabled = runner_config.tablebases.enabled;
+        termination_limits.tablebases.paths = runner_config.tablebases.paths;
+        termination_limits.tablebases.probe_limit_pieces = runner_config.tablebases.probe_limit_pieces;
+        termination_limits.resign.enabled = runner_config.resign.enabled;
+        termination_limits.resign.cp = runner_config.resign.cp;
+        termination_limits.resign.moves = runner_config.resign.moves;
+        termination_limits.resign.min_depth = runner_config.resign.min_depth;
+
         ijccrl::core::runtime::MatchRunner match_runner(pool,
                                                         time_control,
-                                                        max_plies,
+                                                        termination_limits,
                                                         runner_config.watchdog.go_timeout_ms,
                                                         runner_config.limits.abort_on_stop,
                                                         runner_config.watchdog.max_failures,
@@ -1139,9 +1156,26 @@ int main(int argc, char** argv) {
         });
     }
 
+    ijccrl::core::rules::ConfigLimits termination_limits;
+    termination_limits.max_plies = max_plies;
+    termination_limits.draw_by_repetition = runner_config.limits.draw_by_repetition;
+    termination_limits.adjudication.enabled = runner_config.adjudication.enabled;
+    termination_limits.adjudication.score_draw_cp = runner_config.adjudication.score_draw_cp;
+    termination_limits.adjudication.score_draw_moves = runner_config.adjudication.score_draw_moves;
+    termination_limits.adjudication.score_win_cp = runner_config.adjudication.score_win_cp;
+    termination_limits.adjudication.score_win_moves = runner_config.adjudication.score_win_moves;
+    termination_limits.adjudication.min_depth = runner_config.adjudication.min_depth;
+    termination_limits.tablebases.enabled = runner_config.tablebases.enabled;
+    termination_limits.tablebases.paths = runner_config.tablebases.paths;
+    termination_limits.tablebases.probe_limit_pieces = runner_config.tablebases.probe_limit_pieces;
+    termination_limits.resign.enabled = runner_config.resign.enabled;
+    termination_limits.resign.cp = runner_config.resign.cp;
+    termination_limits.resign.moves = runner_config.resign.moves;
+    termination_limits.resign.min_depth = runner_config.resign.min_depth;
+
     ijccrl::core::runtime::MatchRunner match_runner(pool,
                                                     time_control,
-                                                    max_plies,
+                                                    termination_limits,
                                                     runner_config.watchdog.go_timeout_ms,
                                                     runner_config.limits.abort_on_stop,
                                                     runner_config.watchdog.max_failures,

@@ -71,6 +71,13 @@ void MatchRunner::Run(const std::vector<MatchJob>& jobs,
     }
 }
 
+void MatchRunner::Run(const std::vector<MatchJob>& jobs,
+                      int concurrency,
+                      int initial_game_number) {
+    Control control;
+    Run(jobs, concurrency, control, initial_game_number);
+}
+
 void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
                             std::atomic<size_t>& next_job,
                             std::atomic<int>& game_counter,

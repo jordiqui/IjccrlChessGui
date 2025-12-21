@@ -95,6 +95,7 @@ public:
                    const std::vector<std::string>& opening_moves,
                    const ConfigLimits& limits,
                    const TablebaseConfig& tablebases);
+    ~GameTerminator();
 
     void ApplyMove(const std::string& move_uci);
     ProbeInfo BuildProbeInfo() const;
