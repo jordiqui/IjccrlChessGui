@@ -44,6 +44,8 @@ struct CastlingRights {
     bool black_queenside = false;
 };
 
+}  // namespace
+
 struct GameTerminator::PositionState {
     char board[kBoardSize][kBoardSize]{};
     ijccrl::core::game::Side side_to_move = ijccrl::core::game::Side::White;
@@ -331,6 +333,8 @@ struct GameTerminator::PositionState {
         repetition_counts[key] += 1;
     }
 };
+
+namespace {
 
 struct TablebaseProber {
     explicit TablebaseProber(TablebaseConfig config)
