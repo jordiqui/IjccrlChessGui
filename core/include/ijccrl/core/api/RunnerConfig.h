@@ -95,6 +95,7 @@ struct ResignConfig {
 };
 
 struct WatchdogConfig {
+    bool enabled = true;
     int handshake_timeout_ms = 10000;
     int go_timeout_ms = 0;
     int max_failures = 3;

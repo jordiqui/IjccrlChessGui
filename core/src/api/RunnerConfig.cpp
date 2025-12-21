@@ -208,6 +208,7 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
 
     if (root.contains("watchdog")) {
         const auto& watchdog = root.at("watchdog");
+        config.watchdog.enabled = watchdog.value("enabled", config.watchdog.enabled);
         config.watchdog.handshake_timeout_ms =
             watchdog.value("handshake_timeout_ms", config.watchdog.handshake_timeout_ms);
         config.watchdog.go_timeout_ms =
@@ -313,6 +314,7 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
     };
 
     root["watchdog"] = {
+        {"enabled", config.watchdog.enabled},
         {"handshake_timeout_ms", config.watchdog.handshake_timeout_ms},
         {"go_timeout_ms", config.watchdog.go_timeout_ms},
         {"max_failures", config.watchdog.max_failures},
@@ -417,6 +419,7 @@ std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
         {"min_depth", config.resign.min_depth},
     };
     root["watchdog"] = {
+        {"enabled", config.watchdog.enabled},
         {"handshake_timeout_ms", config.watchdog.handshake_timeout_ms},
         {"go_timeout_ms", config.watchdog.go_timeout_ms},
         {"max_failures", config.watchdog.max_failures},

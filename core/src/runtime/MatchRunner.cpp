@@ -20,6 +20,7 @@ MatchRunner::MatchRunner(EnginePool& pool,
                          ijccrl::core::rules::ConfigLimits termination_limits,
                          int go_timeout_ms,
                          bool abort_on_stop,
+                         bool watchdog_enabled,
                          int max_failures,
                          int failure_window_games,
                          bool pause_on_unhealthy,
@@ -33,6 +34,7 @@ MatchRunner::MatchRunner(EnginePool& pool,
       termination_limits_(std::move(termination_limits)),
       go_timeout_ms_(go_timeout_ms),
       abort_on_stop_(abort_on_stop),
+      watchdog_enabled_(watchdog_enabled),
       max_failures_(max_failures),
       failure_window_games_(failure_window_games),
       pause_on_unhealthy_(pause_on_unhealthy),
@@ -160,6 +162,9 @@ void MatchRunner::RunWorker(const std::vector<MatchJob>& jobs,
         const auto handle_failure = [&](int engine_id,
                                          ijccrl::core::uci::UciEngine& engine,
                                          const std::string& label) {
+            if (!watchdog_enabled_) {
+                return;
+            }
             const auto failure = engine.last_failure();
             const bool crashed = !engine.IsRunning();
             if (failure == ijccrl::core::uci::UciEngine::Failure::None && !crashed) {

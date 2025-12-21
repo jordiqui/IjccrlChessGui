@@ -368,6 +368,14 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
         std::move(specs),
         [this](const std::string& line) { AppendLogLine(line); });
     pool.set_handshake_timeout_ms(config.watchdog.handshake_timeout_ms);
+    pool.set_watchdog_enabled(config.watchdog.enabled);
+    {
+        std::ostringstream message;
+        message << "[watchdog] enabled=" << std::boolalpha << config.watchdog.enabled
+                << " handshake_timeout_ms=" << config.watchdog.handshake_timeout_ms
+                << " go_timeout_ms=" << config.watchdog.go_timeout_ms;
+        AppendLogLine(message.str());
+    }
     if (!pool.StartAll("")) {
         AppendLogLine("[ijccrl] Failed to start engine pool");
         running_.store(false);
@@ -1001,6 +1009,7 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
                                                         termination_limits,
                                                         config.watchdog.go_timeout_ms,
                                                         config.limits.abort_on_stop,
+                                                        config.watchdog.enabled,
                                                         config.watchdog.max_failures,
                                                         config.watchdog.failure_window_games,
                                                         config.watchdog.pause_on_unhealthy,
@@ -1612,6 +1621,7 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
                                                     termination_limits,
                                                     config.watchdog.go_timeout_ms,
                                                     config.limits.abort_on_stop,
+                                                    config.watchdog.enabled,
                                                     config.watchdog.max_failures,
                                                     config.watchdog.failure_window_games,
                                                     config.watchdog.pause_on_unhealthy,

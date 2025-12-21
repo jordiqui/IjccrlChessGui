@@ -106,6 +106,23 @@ ijccrl::core::uci::UciEngine& EnginePool::engine(int engine_id) {
 bool EnginePool::InitializeEngine(int engine_id) {
     auto& engine = *engines_[static_cast<size_t>(engine_id)];
     engine.set_handshake_timeout_ms(handshake_timeout_ms_);
+    if (!watchdog_enabled_) {
+        if (!engine.Start(working_dir_)) {
+            std::cerr << "[engine-pool] Failed to start engine " << engine_id << '\n';
+            return false;
+        }
+        if (!engine.UciHandshake()) {
+            std::cerr << "[engine-pool] UCI handshake failed for engine " << engine_id << '\n';
+            engine.Stop();
+            return false;
+        }
+        for (const auto& [name, value] : specs_[static_cast<size_t>(engine_id)].uci_options) {
+            engine.SetOption(name, value);
+        }
+        engine.IsReady();
+        engine.clear_failure();
+        return true;
+    }
     const std::vector<int> backoff_ms = {0, 1000, 2000, 5000, 10000};
     for (size_t attempt = 0; attempt < backoff_ms.size(); ++attempt) {
         const int wait_ms = backoff_ms[attempt];
@@ -117,10 +134,12 @@ bool EnginePool::InitializeEngine(int engine_id) {
             continue;
         }
         if (!engine.UciHandshake()) {
-            const std::string message = "WATCHDOG: Engine \"" + engine.name() +
-                                        "\" unresponsive during handshake, restarting...";
-            if (log_fn_) {
-                log_fn_(message);
+            if (watchdog_enabled_) {
+                const std::string message = "WATCHDOG: Engine \"" + engine.name() +
+                                            "\" unresponsive during handshake, restarting...";
+                if (log_fn_) {
+                    log_fn_(message);
+                }
             }
             std::cerr << "[engine-pool] UCI handshake failed for engine " << engine_id << '\n';
             engine.Stop();
