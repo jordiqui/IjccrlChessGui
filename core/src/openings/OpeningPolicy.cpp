@@ -30,4 +30,17 @@ std::vector<Opening> OpeningPolicy::AssignRoundRobin(
     return assigned;
 }
 
+Opening OpeningPolicy::AssignSwissForIndex(int global_game_index,
+                                           const std::vector<Opening>& openings,
+                                           int games_per_pairing) {
+    if (openings.empty()) {
+        return Opening{};
+    }
+    const int pairing_index = games_per_pairing <= 0
+                                  ? global_game_index
+                                  : (global_game_index / games_per_pairing);
+    const size_t opening_index = static_cast<size_t>(pairing_index) % openings.size();
+    return openings[opening_index];
+}
+
 }  // namespace ijccrl::core::openings

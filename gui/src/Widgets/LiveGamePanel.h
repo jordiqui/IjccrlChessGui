@@ -3,6 +3,7 @@
 #include "ijccrl/core/api/RunnerService.h"
 
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QWidget>
 
@@ -28,6 +29,7 @@ private:
     QLabel* last_move_label_ = nullptr;
     QLabel* live_pgn_label_ = nullptr;
     QLabel* tlcs_label_ = nullptr;
+    QListWidget* pairings_list_ = nullptr;
     QPushButton* open_live_pgn_button_ = nullptr;
     QString live_pgn_path_;
 };

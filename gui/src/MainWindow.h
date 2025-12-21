@@ -45,6 +45,7 @@ private:
     bool validateConfig(const ijccrl::core::api::RunnerConfig& config);
     ijccrl::core::api::RunnerConfig buildConfigFromUi() const;
     void applyConfigToUi(const ijccrl::core::api::RunnerConfig& config);
+    void updateTournamentOptions();
 
     QString current_profile_path_;
     QString output_dir_ = "out";
@@ -54,8 +55,11 @@ private:
 
     QComboBox* tournament_mode_ = nullptr;
     QCheckBox* double_rr_ = nullptr;
+    QSpinBox* rounds_spin_ = nullptr;
     QSpinBox* games_per_pairing_ = nullptr;
     QSpinBox* concurrency_spin_ = nullptr;
+    QCheckBox* avoid_repeats_ = nullptr;
+    QCheckBox* bye_points_ = nullptr;
 
     QSpinBox* base_seconds_spin_ = nullptr;
     QSpinBox* increment_seconds_spin_ = nullptr;

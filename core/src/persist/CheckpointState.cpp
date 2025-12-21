@@ -90,6 +90,39 @@ bool SaveCheckpoint(const std::string& path, const CheckpointState& state) {
         {"opening_id", state.next_game.opening_id},
     };
 
+    root["swiss"] = {
+        {"current_round", state.swiss.current_round},
+        {"bye_history", state.swiss.bye_history},
+    };
+
+    root["swiss"]["pairings_played"] = nlohmann::json::array();
+    for (const auto& pairing : state.swiss.pairings_played) {
+        root["swiss"]["pairings_played"].push_back({
+            {"white_engine_id", pairing.white_engine_id},
+            {"black_engine_id", pairing.black_engine_id},
+        });
+    }
+
+    root["swiss"]["color_history"] = nlohmann::json::array();
+    for (const auto& entry : state.swiss.color_history) {
+        root["swiss"]["color_history"].push_back({
+            {"last_color", entry.last_color},
+            {"streak", entry.streak},
+        });
+    }
+
+    root["swiss"]["pending_pairings_current_round"] = nlohmann::json::array();
+    for (const auto& pending : state.swiss.pending_pairings_current_round) {
+        root["swiss"]["pending_pairings_current_round"].push_back({
+            {"fixture_index", pending.fixture_index},
+            {"round_index", pending.fixture.round_index},
+            {"white_engine_id", pending.fixture.white_engine_id},
+            {"black_engine_id", pending.fixture.black_engine_id},
+            {"game_index_within_pairing", pending.fixture.game_index_within_pairing},
+            {"pairing_id", pending.fixture.pairing_id},
+        });
+    }
+
     return ijccrl::core::util::AtomicFileWriter::Write(path, root.dump(2));
 }
 
@@ -173,6 +206,42 @@ bool LoadCheckpoint(const std::string& path, CheckpointState& state, std::string
         state.next_game.white = next_game.value("white", "");
         state.next_game.black = next_game.value("black", "");
         state.next_game.opening_id = next_game.value("opening_id", "");
+    }
+
+    if (root.contains("swiss")) {
+        const auto& swiss = root.at("swiss");
+        state.swiss.current_round = swiss.value("current_round", state.swiss.current_round);
+        if (swiss.contains("bye_history")) {
+            state.swiss.bye_history = swiss.at("bye_history").get<std::vector<int>>();
+        }
+        if (swiss.contains("pairings_played")) {
+            for (const auto& node : swiss.at("pairings_played")) {
+                CheckpointState::SwissPairing pairing;
+                pairing.white_engine_id = node.value("white_engine_id", -1);
+                pairing.black_engine_id = node.value("black_engine_id", -1);
+                state.swiss.pairings_played.push_back(std::move(pairing));
+            }
+        }
+        if (swiss.contains("color_history")) {
+            for (const auto& node : swiss.at("color_history")) {
+                CheckpointState::SwissColorSnapshot entry;
+                entry.last_color = node.value("last_color", 0);
+                entry.streak = node.value("streak", 0);
+                state.swiss.color_history.push_back(std::move(entry));
+            }
+        }
+        if (swiss.contains("pending_pairings_current_round")) {
+            for (const auto& node : swiss.at("pending_pairings_current_round")) {
+                CheckpointState::SwissPendingFixture pending;
+                pending.fixture_index = node.value("fixture_index", 0);
+                pending.fixture.round_index = node.value("round_index", 0);
+                pending.fixture.white_engine_id = node.value("white_engine_id", -1);
+                pending.fixture.black_engine_id = node.value("black_engine_id", -1);
+                pending.fixture.game_index_within_pairing = node.value("game_index_within_pairing", 0);
+                pending.fixture.pairing_id = node.value("pairing_id", "");
+                state.swiss.pending_pairings_current_round.push_back(std::move(pending));
+            }
+        }
     }
 
     return true;

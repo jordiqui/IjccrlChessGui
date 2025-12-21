@@ -17,6 +17,7 @@ struct RunnerState {
     bool paused = false;
     int gameNo = 0;
     int roundNo = 0;
+    int totalRounds = 0;
     std::string whiteName;
     std::string blackName;
     std::string lastMove;
@@ -26,6 +27,7 @@ struct RunnerState {
     std::string tourneyPgnPath;
     int concurrency = 1;
     int activeGames = 0;
+    std::vector<std::string> currentRoundPairings;
 };
 
 struct StandingRow {

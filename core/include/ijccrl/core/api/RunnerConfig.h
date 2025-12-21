@@ -19,6 +19,8 @@ struct TournamentConfig {
     int rounds = 1;
     int games_per_pairing = 1;
     int concurrency = 1;
+    bool avoid_repeats = true;
+    double bye_points = 1.0;
 };
 
 struct OpeningConfig {

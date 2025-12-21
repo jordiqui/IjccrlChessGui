@@ -3,7 +3,7 @@
 #include "ijccrl/core/game/GameRunner.h"
 #include "ijccrl/core/openings/Opening.h"
 #include "ijccrl/core/runtime/EnginePool.h"
-#include "ijccrl/core/tournament/RoundRobinScheduler.h"
+#include "ijccrl/core/tournament/TournamentTypes.h"
 
 #include <atomic>
 #include <condition_variable>

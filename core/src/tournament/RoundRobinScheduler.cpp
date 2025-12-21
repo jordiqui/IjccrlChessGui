@@ -106,4 +106,22 @@ std::vector<Fixture> RoundRobinScheduler::BuildSchedule(int engine_count,
     return fixtures;
 }
 
+TournamentRound RoundRobinScheduler::BuildRound(const TournamentContext& context) {
+    TournamentRound round;
+    round.round_index = context.round_index;
+    if (context.engine_count < 2) {
+        return round;
+    }
+    const auto fixtures = BuildSchedule(context.engine_count,
+                                        context.double_round_robin,
+                                        context.games_per_pairing,
+                                        context.repeat_count);
+    for (const auto& fixture : fixtures) {
+        if (fixture.round_index == context.round_index) {
+            round.fixtures.push_back(fixture);
+        }
+    }
+    return round;
+}
+
 }  // namespace ijccrl::core::tournament

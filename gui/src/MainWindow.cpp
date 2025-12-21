@@ -133,13 +133,22 @@ void MainWindow::createUi() {
     tournament_mode_->addItem("H2H", "h2h");
     tournament_mode_->setCurrentIndex(0);
     tournament_mode_->setItemData(1, 0, Qt::UserRole - 1);
-    tournament_mode_->setItemData(2, 0, Qt::UserRole - 1);
     tournament_mode_->setItemData(3, 0, Qt::UserRole - 1);
+    connect(tournament_mode_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &MainWindow::updateTournamentOptions);
 
     double_rr_ = new QCheckBox("Double round robin", setup_tab);
+    rounds_spin_ = new QSpinBox(setup_tab);
+    rounds_spin_->setRange(1, 200);
+    rounds_spin_->setValue(1);
     games_per_pairing_ = new QSpinBox(setup_tab);
     games_per_pairing_->setRange(1, 1000);
     games_per_pairing_->setValue(1);
+    avoid_repeats_ = new QCheckBox("Avoid repeats", setup_tab);
+    avoid_repeats_->setChecked(true);
+    bye_points_ = new QCheckBox("Bye = 1 point", setup_tab);
+    bye_points_->setChecked(true);
 
     concurrency_spin_ = new QSpinBox(setup_tab);
     concurrency_spin_->setRange(1, 128);
@@ -205,8 +214,11 @@ void MainWindow::createUi() {
 
     options_layout->addRow("Tournament mode", tournament_mode_);
     options_layout->addRow("Double RR", double_rr_);
+    options_layout->addRow("Rounds", rounds_spin_);
     options_layout->addRow("Games per pairing", games_per_pairing_);
     options_layout->addRow("Concurrency", concurrency_spin_);
+    options_layout->addRow("", avoid_repeats_);
+    options_layout->addRow("", bye_points_);
     options_layout->addRow("TC base (sec)", base_seconds_spin_);
     options_layout->addRow("TC increment (sec)", increment_seconds_spin_);
     options_layout->addRow("Openings type", openings_type_);
@@ -218,6 +230,7 @@ void MainWindow::createUi() {
 
     setup_layout->addLayout(options_layout);
     setup_layout->addStretch(1);
+    updateTournamentOptions();
 
     // Live tab
     auto* live_tab = new QWidget(this);
@@ -273,6 +286,14 @@ void MainWindow::createMenus() {
     connect(exit_action, &QAction::triggered, this, &QWidget::close);
 
     refreshRecentProfiles();
+}
+
+void MainWindow::updateTournamentOptions() {
+    const bool is_swiss = tournament_mode_->currentData().toString() == "swiss";
+    double_rr_->setEnabled(!is_swiss);
+    rounds_spin_->setEnabled(is_swiss);
+    avoid_repeats_->setEnabled(is_swiss);
+    bye_points_->setEnabled(is_swiss);
 }
 
 void MainWindow::refreshRecentProfiles() {
@@ -593,9 +614,13 @@ ijccrl::core::api::RunnerConfig MainWindow::buildConfigFromUi() const {
     }
 
     config.tournament.mode = tournament_mode_->currentData().toString().toStdString();
-    config.tournament.double_round_robin = double_rr_->isChecked();
+    const bool is_swiss = config.tournament.mode == "swiss";
+    config.tournament.double_round_robin = is_swiss ? false : double_rr_->isChecked();
+    config.tournament.rounds = rounds_spin_->value();
     config.tournament.games_per_pairing = games_per_pairing_->value();
     config.tournament.concurrency = concurrency_spin_->value();
+    config.tournament.avoid_repeats = avoid_repeats_->isChecked();
+    config.tournament.bye_points = bye_points_->isChecked() ? 1.0 : 0.0;
 
     config.time_control.base_seconds = base_seconds_spin_->value();
     config.time_control.increment_seconds = increment_seconds_spin_->value();
@@ -660,8 +685,11 @@ void MainWindow::applyConfigToUi(const ijccrl::core::api::RunnerConfig& config) 
     }
 
     double_rr_->setChecked(config.tournament.double_round_robin);
+    rounds_spin_->setValue(config.tournament.rounds);
     games_per_pairing_->setValue(config.tournament.games_per_pairing);
     concurrency_spin_->setValue(config.tournament.concurrency);
+    avoid_repeats_->setChecked(config.tournament.avoid_repeats);
+    bye_points_->setChecked(config.tournament.bye_points > 0.0);
 
     base_seconds_spin_->setValue(config.time_control.base_seconds);
     increment_seconds_spin_->setValue(config.time_control.increment_seconds);
@@ -685,4 +713,6 @@ void MainWindow::applyConfigToUi(const ijccrl::core::api::RunnerConfig& config) 
         output_dir_ = "out";
     }
     output_dir_edit_->setText(output_dir_);
+
+    updateTournamentOptions();
 }
