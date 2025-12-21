@@ -1,4 +1,5 @@
 #include "ijccrl/core/broadcast/TlcsIniAdapter.h"
+#include "ijccrl/core/api/RunnerConfig.h"
 #include "ijccrl/core/game/GameRunner.h"
 #include "ijccrl/core/game/TimeControl.h"
 #include "ijccrl/core/openings/EpdParser.h"
@@ -16,9 +17,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <map>
-#include <mutex>
 #include <algorithm>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <string>
@@ -26,88 +26,7 @@
 
 namespace {
 
-struct EngineConfig {
-    std::string name;
-    std::string cmd;
-    std::vector<std::string> args;
-    std::map<std::string, std::string> uci_options;
-};
-
-struct TournamentConfig {
-    std::string mode = "round_robin";
-    bool double_round_robin = false;
-    int rounds = 1;
-    int games_per_pairing = 1;
-    int concurrency = 1;
-};
-
-struct OpeningConfig {
-    std::string type = "epd";
-    std::string path;
-    std::string policy = "round_robin";
-    int seed = 0;
-};
-
-struct OutputConfig {
-    std::string tournament_pgn = "out/tournament.pgn";
-    std::string live_pgn = "out/live.pgn";
-    std::string results_json = "out/results.json";
-    std::string pairings_csv = "out/pairings.csv";
-    std::string progress_log;
-};
-
-std::string JsonValueToString(const nlohmann::json& value) {
-    if (value.is_string()) {
-        return value.get<std::string>();
-    }
-    if (value.is_boolean()) {
-        return value.get<bool>() ? "true" : "false";
-    }
-    if (value.is_number_integer()) {
-        return std::to_string(value.get<long long>());
-    }
-    if (value.is_number_unsigned()) {
-        return std::to_string(value.get<unsigned long long>());
-    }
-    if (value.is_number_float()) {
-        return std::to_string(value.get<double>());
-    }
-    return value.dump();
-}
-
-bool LoadConfig(const std::string& path, nlohmann::json& config) {
-    std::ifstream input(path);
-    if (!input) {
-        std::cerr << "[ijccrlcli] Failed to open config: " << path << '\n';
-        return false;
-    }
-    try {
-        input >> config;
-    } catch (const std::exception& ex) {
-        std::cerr << "[ijccrlcli] Failed to parse JSON: " << ex.what() << '\n';
-        return false;
-    }
-    return true;
-}
-
-bool ParseEngine(const nlohmann::json& node, EngineConfig& out) {
-    if (!node.contains("cmd")) {
-        return false;
-    }
-    out.name = node.value("name", "UCI");
-    out.cmd = node.value("cmd", "");
-    if (node.contains("args")) {
-        for (const auto& arg : node.at("args")) {
-            out.args.push_back(arg.get<std::string>());
-        }
-    }
-    if (node.contains("uci_options")) {
-        for (const auto& item : node.at("uci_options").items()) {
-            out.uci_options[item.key()] = JsonValueToString(item.value());
-        }
-    }
-    return true;
-}
+using ijccrl::core::api::RunnerConfig;
 
 void AppendTournamentPgn(const std::string& path, const std::string& pgn) {
     const std::filesystem::path fs_path(path);
@@ -180,88 +99,43 @@ int main(int argc, char** argv) {
     const std::string config_path = argv[1];
     std::cout << "[ijccrlcli] Runner config: " << config_path << '\n';
 
-    nlohmann::json config;
-    if (!LoadConfig(config_path, config)) {
+    RunnerConfig runner_config;
+    std::string config_error;
+    if (!RunnerConfig::LoadFromFile(config_path, runner_config, &config_error)) {
+        std::cerr << "[ijccrlcli] " << config_error << '\n';
         return 1;
     }
 
-    if (!config.contains("engines") || config.at("engines").size() < 2) {
+    if (runner_config.engines.size() < 2) {
         std::cerr << "[ijccrlcli] Config must define two engines." << '\n';
         return 1;
     }
 
-    std::vector<EngineConfig> engine_configs;
-    engine_configs.reserve(config.at("engines").size());
-    for (const auto& engine_node : config.at("engines")) {
-        EngineConfig engine;
-        if (!ParseEngine(engine_node, engine)) {
-            std::cerr << "[ijccrlcli] Failed to parse engine configs." << '\n';
-            return 1;
-        }
-        engine_configs.push_back(std::move(engine));
-    }
-
     ijccrl::core::game::TimeControl time_control;
-    time_control.base_ms = 60000;
-    time_control.increment_ms = 0;
-    time_control.move_time_ms = 200;
-    if (config.contains("time_control")) {
-        const auto& tc = config.at("time_control");
-        time_control.base_ms = tc.value("base_seconds", 60) * 1000;
-        time_control.increment_ms = tc.value("increment_seconds", 0) * 1000;
-        time_control.move_time_ms = tc.value("move_time_ms", 200);
-    }
+    time_control.base_ms = runner_config.time_control.base_seconds * 1000;
+    time_control.increment_ms = runner_config.time_control.increment_seconds * 1000;
+    time_control.move_time_ms = runner_config.time_control.move_time_ms;
 
-    const auto limits_node = config.value("limits", nlohmann::json::object());
-    const int max_plies = limits_node.value("max_plies", config.value("max_plies", 400));
-    const bool draw_by_repetition = limits_node.value("draw_by_repetition", false);
-    const int max_games = config.value("max_games", -1);
+    const int max_plies = runner_config.limits.max_plies;
+    const bool draw_by_repetition = runner_config.limits.draw_by_repetition;
+    const int max_games = runner_config.limits.max_games;
 
-    TournamentConfig tournament;
-    if (config.contains("tournament")) {
-        const auto& node = config.at("tournament");
-        tournament.mode = node.value("mode", tournament.mode);
-        tournament.double_round_robin = node.value("double_round_robin", tournament.double_round_robin);
-        tournament.rounds = node.value("rounds", tournament.rounds);
-        tournament.games_per_pairing = node.value("games_per_pairing", tournament.games_per_pairing);
-        tournament.concurrency = node.value("concurrency", tournament.concurrency);
-    }
-
-    OpeningConfig opening_config;
-    if (config.contains("openings")) {
-        const auto& node = config.at("openings");
-        opening_config.type = node.value("type", opening_config.type);
-        opening_config.path = node.value("path", opening_config.path);
-        opening_config.policy = node.value("policy", opening_config.policy);
-        opening_config.seed = node.value("seed", opening_config.seed);
-    }
-
-    OutputConfig output_config;
-    if (config.contains("output")) {
-        const auto& output = config.at("output");
-        output_config.tournament_pgn = output.value("tournament_pgn", output_config.tournament_pgn);
-        output_config.live_pgn = output.value("live_pgn", output_config.live_pgn);
-        output_config.results_json = output.value("results_json", output_config.results_json);
-        output_config.pairings_csv = output.value("pairings_csv", output_config.pairings_csv);
-        output_config.progress_log = output.value("progress_log", output_config.progress_log);
-    }
+    const auto& tournament = runner_config.tournament;
+    const auto& opening_config = runner_config.openings;
+    const auto& output_config = runner_config.output;
 
     std::unique_ptr<ijccrl::core::broadcast::IBroadcastAdapter> adapter;
     std::string site_tag;
 
-    if (config.contains("broadcast")) {
-        const auto& broadcast = config.at("broadcast");
-        const auto adapter_name = broadcast.value("adapter", "");
-        if (adapter_name == "tlcs_ini") {
-            const auto server_ini = broadcast.value("server_ini", "");
-            auto tlcs = std::make_unique<ijccrl::core::broadcast::TlcsIniAdapter>();
-            if (server_ini.empty() || !tlcs->Configure(server_ini)) {
-                std::cerr << "[ijccrlcli] Failed to configure TLCS adapter." << '\n';
-                return 1;
-            }
-            site_tag = tlcs->site();
-            adapter = std::move(tlcs);
+    if (runner_config.broadcast.adapter == "tlcs_ini") {
+        const auto& server_ini = runner_config.broadcast.server_ini;
+        auto tlcs = std::make_unique<ijccrl::core::broadcast::TlcsIniAdapter>();
+        if (server_ini.empty() || !tlcs->Configure(server_ini)) {
+            std::cerr << "[ijccrlcli] Failed to configure TLCS adapter." << '\n';
+            return 1;
         }
+        site_tag = tlcs->site();
+        adapter = std::move(tlcs);
     }
 
     if (!adapter) {
@@ -274,10 +148,10 @@ int main(int argc, char** argv) {
     }
 
     std::vector<ijccrl::core::runtime::EngineSpec> specs;
-    specs.reserve(engine_configs.size());
+    specs.reserve(runner_config.engines.size());
     std::vector<std::string> engine_names;
-    engine_names.reserve(engine_configs.size());
-    for (const auto& engine : engine_configs) {
+    engine_names.reserve(runner_config.engines.size());
+    for (const auto& engine : runner_config.engines) {
         ijccrl::core::runtime::EngineSpec spec;
         spec.name = engine.name;
         spec.command = engine.cmd;
@@ -312,7 +186,7 @@ int main(int argc, char** argv) {
     }
 
     auto fixtures = ijccrl::core::tournament::RoundRobinScheduler::BuildSchedule(
-        static_cast<int>(engine_configs.size()),
+        static_cast<int>(runner_config.engines.size()),
         tournament.double_round_robin,
         tournament.games_per_pairing,
         tournament.rounds);

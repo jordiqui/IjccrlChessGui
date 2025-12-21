@@ -6,7 +6,9 @@
 #include "ijccrl/core/tournament/RoundRobinScheduler.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -30,25 +32,36 @@ class MatchRunner {
 public:
     using ResultCallback = std::function<void(const MatchResult&)>;
     using LiveUpdateFn = ijccrl::core::game::GameRunner::LiveUpdateFn;
+    using JobEventFn = std::function<void(const MatchJob&, int game_number, bool started)>;
+
+    struct Control {
+        std::atomic<bool>* stop = nullptr;
+        std::atomic<bool>* paused = nullptr;
+        std::mutex* pause_mutex = nullptr;
+        std::condition_variable* pause_cv = nullptr;
+    };
 
     MatchRunner(EnginePool& pool,
                 ijccrl::core::game::TimeControl time_control,
                 int max_plies,
                 ResultCallback result_callback,
-                LiveUpdateFn live_update);
+                LiveUpdateFn live_update,
+                JobEventFn job_event = {});
 
-    void Run(const std::vector<MatchJob>& jobs, int concurrency);
+    void Run(const std::vector<MatchJob>& jobs, int concurrency, const Control& control = {});
 
 private:
     void RunWorker(const std::vector<MatchJob>& jobs,
                    std::atomic<size_t>& next_job,
-                   std::atomic<int>& game_counter);
+                   std::atomic<int>& game_counter,
+                   const Control& control);
 
     EnginePool& pool_;
     ijccrl::core::game::TimeControl time_control_;
     int max_plies_ = 0;
     ResultCallback result_callback_;
     LiveUpdateFn live_update_;
+    JobEventFn job_event_;
 };
 
 }  // namespace ijccrl::core::runtime

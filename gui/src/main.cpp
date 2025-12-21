@@ -1,6 +1,12 @@
-#include <iostream>
+#include "MainWindow.h"
 
-int main() {
-    std::cout << "[ijccrlgui] TODO: GUI shell." << '\n';
-    return 0;
+#include <QApplication>
+
+int main(int argc, char** argv) {
+    QApplication app(argc, argv);
+
+    MainWindow window;
+    window.show();
+
+    return app.exec();
 }
