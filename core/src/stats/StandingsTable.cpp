@@ -40,4 +40,13 @@ void StandingsTable::RecordResult(int white_id, int black_id, const std::string&
     }
 }
 
+void StandingsTable::LoadSnapshot(std::vector<EngineStats> snapshot) {
+    standings_ = std::move(snapshot);
+    int total_engine_games = 0;
+    for (const auto& entry : standings_) {
+        total_engine_games += entry.games;
+    }
+    games_played_ = total_engine_games / 2;
+}
+
 }  // namespace ijccrl::core::stats

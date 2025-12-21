@@ -34,6 +34,8 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
                                         ijccrl::core::uci::UciEngine& black,
                                         const TimeControl& time_control,
                                         int max_plies,
+                                        int go_timeout_ms,
+                                        const std::atomic<bool>* stop_requested,
                                         ijccrl::core::pgn::PgnGame pgn_template,
                                         const std::string& initial_fen,
                                         const std::vector<std::string>& opening_moves,
@@ -62,6 +64,11 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
     const std::string position_fen = IsStartposFen(initial_fen) ? "" : initial_fen;
 
     for (int ply = 0; ply < max_plies; ++ply) {
+        if (stop_requested && stop_requested->load()) {
+            result.state.result = "*";
+            result.state.termination = "aborted";
+            break;
+        }
         auto& engine = (result.state.side_to_move == Side::White) ? white : black;
 
         if (!engine.IsRunning()) {
@@ -73,7 +80,7 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
         engine.Position(position_fen, result.state.moves_uci);
 
         const int movetime_ms = time_control.move_time_ms;
-        const int timeout_ms = movetime_ms + 5000;
+        const int timeout_ms = go_timeout_ms > 0 ? go_timeout_ms : (movetime_ms + 5000);
         std::string bestmove;
         const bool got_move = engine.Go(result.state.wtime_ms,
                                         result.state.btime_ms,
@@ -115,7 +122,7 @@ GameRunner::Result GameRunner::PlayGame(ijccrl::core::uci::UciEngine& white,
             (result.state.side_to_move == Side::White) ? Side::Black : Side::White;
     }
 
-    if (result.state.result == "*") {
+    if (result.state.result == "*" && result.state.termination.empty()) {
         result.state.result = "1/2-1/2";
         result.state.termination = "ply limit";
     }

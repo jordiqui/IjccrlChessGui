@@ -30,6 +30,8 @@ private slots:
     void pauseRunner();
     void resumeRunner();
     void stopRunner();
+    void resumeTournament();
+    void exportResults();
     void openOutputFolder();
     void updateLiveView();
     void updateLogInterval(int value);
@@ -79,6 +81,8 @@ private:
     QAction* pause_action_ = nullptr;
     QAction* resume_action_ = nullptr;
     QAction* stop_action_ = nullptr;
+    QAction* resume_tournament_action_ = nullptr;
+    QAction* export_results_action_ = nullptr;
 
     ijccrl::core::api::RunnerService runner_service_;
 };

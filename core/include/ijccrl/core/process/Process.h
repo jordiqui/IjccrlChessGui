@@ -23,6 +23,7 @@ public:
     bool TryReadLine(std::string& line);
     bool IsRunning() const;
     bool Terminate();
+    bool WaitForExit(int timeout_ms);
     int ExitCode() const;
 
 private:

@@ -50,16 +50,18 @@ public:
     RunnerConfig getConfigSnapshot() const;
 
     bool start();
+    bool startWithResume(bool resume);
     void requestStop();
     void pause();
     void resume();
+    bool exportResults(const std::string& directory, std::string* error);
 
     RunnerState getStateSnapshot() const;
     std::vector<StandingRow> getStandingsSnapshot() const;
     std::string getLastLogLines(int n) const;
 
 private:
-    void Run(RunnerConfig config);
+    void Run(RunnerConfig config, bool resume);
     void AppendLogLine(const std::string& line);
 
     mutable std::mutex config_mutex_;

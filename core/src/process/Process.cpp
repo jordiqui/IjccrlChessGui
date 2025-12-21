@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -291,6 +292,33 @@ bool Process::Terminate() {
     running_ = false;
     cv_.notify_all();
     return true;
+}
+
+bool Process::WaitForExit(int timeout_ms) {
+    if (!running_) {
+        return true;
+    }
+
+#ifdef _WIN32
+    if (!process_handle_) {
+        return true;
+    }
+    DWORD wait_result = WaitForSingleObject(reinterpret_cast<HANDLE>(process_handle_),
+                                            timeout_ms < 0 ? INFINITE : static_cast<DWORD>(timeout_ms));
+    if (wait_result == WAIT_OBJECT_0) {
+        return true;
+    }
+    return false;
+#else
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (timeout_ms < 0 || std::chrono::steady_clock::now() < deadline) {
+        if (!IsRunning()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return !IsRunning();
+#endif
 }
 
 int Process::ExitCode() const {

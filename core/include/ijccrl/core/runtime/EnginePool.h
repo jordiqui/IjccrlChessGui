@@ -3,6 +3,7 @@
 #include "ijccrl/core/uci/UciEngine.h"
 
 #include <condition_variable>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <string>
@@ -45,12 +46,14 @@ private:
 
 class EnginePool {
 public:
-    explicit EnginePool(std::vector<EngineSpec> specs);
+    explicit EnginePool(std::vector<EngineSpec> specs,
+                        std::function<void(const std::string&)> log_fn = {});
 
     bool StartAll(const std::string& working_dir);
     EngineLease AcquirePair(int white_id, int black_id);
     void ReleasePair(int white_id, int black_id);
     bool RestartEngine(int engine_id);
+    void set_handshake_timeout_ms(int timeout_ms) { handshake_timeout_ms_ = timeout_ms; }
 
     ijccrl::core::uci::UciEngine& engine(int engine_id);
     const std::vector<EngineSpec>& specs() const { return specs_; }
@@ -62,6 +65,8 @@ private:
     std::vector<ijccrl::core::uci::UciEngine> engines_;
     std::vector<bool> busy_;
     std::string working_dir_;
+    int handshake_timeout_ms_ = 10000;
+    std::function<void(const std::string&)> log_fn_{};
     std::mutex mutex_;
     std::condition_variable cv_;
 };
