@@ -107,8 +107,9 @@ public:
     static std::string ReasonToString(TerminationReason reason);
     static std::string TerminationTag(TerminationReason reason);
 
-private:
     struct PositionState;
+
+private:
     std::unique_ptr<PositionState> position_state_;
     ConfigLimits limits_;
     TablebaseConfig tablebases_;
