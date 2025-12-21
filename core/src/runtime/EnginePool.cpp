@@ -54,7 +54,8 @@ EnginePool::EnginePool(std::vector<EngineSpec> specs,
       log_fn_(std::move(log_fn)) {
     engines_.reserve(specs_.size());
     for (const auto& spec : specs_) {
-        engines_.emplace_back(spec.name, spec.command, spec.args);
+        engines_.push_back(std::make_unique<ijccrl::core::uci::UciEngine>(
+            spec.name, spec.command, spec.args));
     }
     busy_.assign(engines_.size(), false);
 }
@@ -94,16 +95,16 @@ bool EnginePool::RestartEngine(int engine_id) {
     if (engine_id < 0 || engine_id >= static_cast<int>(engines_.size())) {
         return false;
     }
-    engines_[static_cast<size_t>(engine_id)].Stop();
+    engines_[static_cast<size_t>(engine_id)]->Stop();
     return InitializeEngine(engine_id);
 }
 
 ijccrl::core::uci::UciEngine& EnginePool::engine(int engine_id) {
-    return engines_[static_cast<size_t>(engine_id)];
+    return *engines_[static_cast<size_t>(engine_id)];
 }
 
 bool EnginePool::InitializeEngine(int engine_id) {
-    auto& engine = engines_[static_cast<size_t>(engine_id)];
+    auto& engine = *engines_[static_cast<size_t>(engine_id)];
     engine.set_handshake_timeout_ms(handshake_timeout_ms_);
     const std::vector<int> backoff_ms = {0, 1000, 2000, 5000, 10000};
     for (size_t attempt = 0; attempt < backoff_ms.size(); ++attempt) {

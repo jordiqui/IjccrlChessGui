@@ -59,7 +59,10 @@ public:
 
     void Run(const std::vector<MatchJob>& jobs,
              int concurrency,
-             const Control& control = {},
+             const Control& control,
+             int initial_game_number = 0);
+    void Run(const std::vector<MatchJob>& jobs,
+             int concurrency,
              int initial_game_number = 0);
 
 private:

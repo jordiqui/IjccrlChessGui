@@ -44,7 +44,7 @@ struct CastlingRights {
     bool black_queenside = false;
 };
 
-struct PositionState {
+struct GameTerminator::PositionState {
     char board[kBoardSize][kBoardSize]{};
     ijccrl::core::game::Side side_to_move = ijccrl::core::game::Side::White;
     CastlingRights castling{};
@@ -336,7 +336,7 @@ struct TablebaseProber {
     explicit TablebaseProber(TablebaseConfig config)
         : config_(std::move(config)) {}
 
-    ProbeInfo Probe(const PositionState& position) const {
+    ProbeInfo Probe(const GameTerminator::PositionState& position) const {
         ProbeInfo info;
         info.pieces = position.PieceCount();
         info.tb_available = config_.enabled && !config_.paths.empty();
@@ -399,11 +399,13 @@ bool HasEval(const ijccrl::core::game::GameState::EvalInfo& eval) {
 
 }  // namespace
 
+GameTerminator::~GameTerminator() = default;
+
 GameTerminator::GameTerminator(const std::string& initial_fen,
                                const std::vector<std::string>& opening_moves,
                                const ConfigLimits& limits,
                                const TablebaseConfig& tablebases)
-    : position_state_(std::make_unique<PositionState>()),
+    : position_state_(std::make_unique<GameTerminator::PositionState>()),
       limits_(limits),
       tablebases_(tablebases) {
     if (initial_fen.empty()) {
