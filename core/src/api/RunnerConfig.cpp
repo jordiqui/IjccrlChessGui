@@ -159,6 +159,8 @@ bool RunnerConfig::LoadFromFile(const std::string& path, RunnerConfig& config, s
             config.broadcast.tlcs.feed_path = tlcs.value("feed_path", config.broadcast.tlcs.feed_path);
             config.broadcast.tlcs.auto_write_server_ini =
                 tlcs.value("auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini);
+            config.broadcast.tlcs.force_update_path =
+                tlcs.value("force_update_path", config.broadcast.tlcs.force_update_path);
             config.broadcast.tlcs.tlcs_exe = tlcs.value("tlcs_exe", config.broadcast.tlcs.tlcs_exe);
             config.broadcast.tlcs.autostart = tlcs.value("autostart", config.broadcast.tlcs.autostart);
         }
@@ -279,6 +281,7 @@ bool RunnerConfig::SaveToFile(const std::string& path, const RunnerConfig& confi
              {"server_ini", config.broadcast.tlcs.server_ini},
              {"feed_path", config.broadcast.tlcs.feed_path},
              {"auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini},
+             {"force_update_path", config.broadcast.tlcs.force_update_path},
              {"tlcs_exe", config.broadcast.tlcs.tlcs_exe},
              {"autostart", config.broadcast.tlcs.autostart},
          }},
@@ -389,6 +392,7 @@ std::string RunnerConfig::ToJsonString(const RunnerConfig& config) {
              {"server_ini", config.broadcast.tlcs.server_ini},
              {"feed_path", config.broadcast.tlcs.feed_path},
              {"auto_write_server_ini", config.broadcast.tlcs.auto_write_server_ini},
+             {"force_update_path", config.broadcast.tlcs.force_update_path},
              {"tlcs_exe", config.broadcast.tlcs.tlcs_exe},
              {"autostart", config.broadcast.tlcs.autostart},
          }},

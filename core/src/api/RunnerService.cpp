@@ -341,6 +341,7 @@ void RunnerService::Run(RunnerConfig config, bool resume) {
         tlcs_config.server_ini = config.broadcast.tlcs.server_ini;
         tlcs_config.feed_path = config.broadcast.tlcs.feed_path;
         tlcs_config.auto_write_server_ini = config.broadcast.tlcs.auto_write_server_ini;
+        tlcs_config.force_update_path = config.broadcast.tlcs.force_update_path;
         if (tlcs->Configure(tlcs_config)) {
             site_tag = tlcs->site();
             feed_adapter = std::move(tlcs);
