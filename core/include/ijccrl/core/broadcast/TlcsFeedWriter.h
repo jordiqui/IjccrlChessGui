@@ -22,7 +22,12 @@ struct GameResult {
 
 class TlcsFeedWriter {
 public:
-    bool Open(const std::string& feed_path);
+    enum class Format {
+        Tlcv,
+        WinboardDebug,
+    };
+
+    bool Open(const std::string& feed_path, Format format);
 
     void WriteHeader(const ijccrl::core::api::RunnerConfig& cfg);
     void OnGameStart(const GameInfo& g, const std::string& initial_fen);
@@ -48,14 +53,17 @@ private:
 
     void ResetFeedFile();
     void AppendLine(const std::string& line);
+    void AppendWinboardFen(const std::string& fen);
     void WriteSnapshot();
-    void LogAppend(const std::string& line) const;
+    void LogWrite(std::size_t bytes_written) const;
 
     std::string feed_path_;
     std::vector<std::string> lines_;
     int halfmove_index_ = 0;
     int fmr_ = 0;
     bool open_ = false;
+    Format format_ = Format::Tlcv;
+    std::string last_fen_;
 };
 
 }  // namespace ijccrl::core::broadcast

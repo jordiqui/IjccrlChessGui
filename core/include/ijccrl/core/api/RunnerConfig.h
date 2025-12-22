@@ -53,6 +53,7 @@ struct BroadcastConfig {
     struct TlcsConfig {
         std::string server_ini;
         std::string feed_path;
+        std::string format = "winboard_debug";
         bool auto_write_server_ini = false;
         bool force_update_path = true;
         std::string tlcs_exe;
