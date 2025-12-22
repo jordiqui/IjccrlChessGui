@@ -3,7 +3,7 @@
 #include "ijccrl/core/api/RunnerConfig.h"
 
 #include <string>
-#include <optional>
+#include <vector>
 
 namespace ijccrl::core::broadcast {
 
@@ -48,9 +48,11 @@ private:
 
     void ResetFeedFile();
     void AppendLine(const std::string& line);
+    void WriteSnapshot();
     void LogAppend(const std::string& line) const;
 
     std::string feed_path_;
+    std::vector<std::string> lines_;
     int halfmove_index_ = 0;
     int fmr_ = 0;
     bool open_ = false;

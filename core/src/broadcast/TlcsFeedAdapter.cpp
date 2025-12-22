@@ -73,11 +73,6 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
     server_ini_path_ = config.server_ini;
     feed_path_ = config.feed_path;
 
-    if (feed_path_.empty()) {
-        std::cerr << "[tlcs] TLCV feed path is not configured." << '\n';
-        return false;
-    }
-
     std::string ini_path;
     std::string ini_site;
     if (!server_ini_path_.empty()) {
@@ -85,12 +80,19 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
             std::cerr << "[tlcs] Failed to parse server.ini: " << server_ini_path_ << '\n';
             return false;
         }
+        if (feed_path_.empty() && !ini_path.empty()) {
+            feed_path_ = ini_path;
+        }
+    }
 
-        if (!ini_path.empty() && ini_path != feed_path_) {
-            if (PathsEquivalent(ini_path, feed_path_)) {
-                std::cerr << "[tlcs] PATH mismatch (ini=" << ini_path << ", cfg=" << feed_path_
-                          << "). Normalised equal -> continuing." << '\n';
-            } else if (config.force_update_path) {
+    if (feed_path_.empty()) {
+        std::cerr << "[tlcs] TLCV feed path is not configured." << '\n';
+        return false;
+    }
+
+    if (!server_ini_path_.empty()) {
+        if (!ini_path.empty() && !PathsEquivalent(ini_path, feed_path_)) {
+            if (config.force_update_path) {
                 const std::string normalised_path = NormalisePathForIni(feed_path_);
                 if (!UpdateServerIniPath(server_ini_path_, normalised_path)) {
                     std::cerr << "[tlcs] Failed to update PATH in server.ini." << '\n';
