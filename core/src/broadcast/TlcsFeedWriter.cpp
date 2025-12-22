@@ -3,34 +3,13 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 namespace ijccrl::core::broadcast {
 
-namespace {
-
-std::string JoinLinesCRLF(const std::vector<std::string>& lines) {
-    std::ostringstream out;
-    for (const auto& line : lines) {
-        out << line << "\r\n";
-    }
-    return out.str();
-}
-
-void WriteFeedFileInPlace(const std::string& path, const std::string& contents) {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        return;
-    }
-    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-    out.flush();
-}
-
-}  // namespace
-
 bool TlcsFeedWriter::Open(const std::string& feed_path) {
     feed_path_ = feed_path;
-    lines_.clear();
     halfmove_index_ = 0;
     fmr_ = 0;
     open_ = !feed_path_.empty();
@@ -55,7 +34,7 @@ void TlcsFeedWriter::OnGameStart(const GameInfo& g, const std::string& initial_f
         return;
     }
 
-    lines_.clear();
+    ResetFeedFile();
 
     std::string fen_value = initial_fen.empty() ? StartposFen() : initial_fen;
     FenParts parts;
@@ -120,8 +99,6 @@ void TlcsFeedWriter::Flush() {
     if (!open_) {
         return;
     }
-
-    WriteFeedFileInPlace(feed_path_, JoinLinesCRLF(lines_));
 }
 
 std::string TlcsFeedWriter::StartposFen() {
@@ -153,7 +130,29 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 }
 
 void TlcsFeedWriter::AppendLine(const std::string& line) {
-    lines_.push_back(line);
+    std::ofstream out(feed_path_, std::ios::binary | std::ios::app);
+    if (!out) {
+        return;
+    }
+    out << line << "\r\n";
+    out.flush();
+    LogAppend(line);
+}
+
+void TlcsFeedWriter::ResetFeedFile() {
+    std::ofstream out(feed_path_, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        return;
+    }
+    out.flush();
+}
+
+void TlcsFeedWriter::LogAppend(const std::string& line) const {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(feed_path_, ec);
+    const auto reported_size = ec ? 0U : size;
+    std::cout << "[tlcs] Append: " << line << "\\r\\n"
+              << " (feed_size=" << reported_size << ")" << '\n';
 }
 
 }  // namespace ijccrl::core::broadcast
