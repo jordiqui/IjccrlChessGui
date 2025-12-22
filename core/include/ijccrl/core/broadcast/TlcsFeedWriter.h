@@ -3,7 +3,7 @@
 #include "ijccrl/core/api/RunnerConfig.h"
 
 #include <string>
-#include <vector>
+#include <optional>
 
 namespace ijccrl::core::broadcast {
 
@@ -46,10 +46,11 @@ private:
     static std::string FormatFenPrefix(const FenParts& parts);
     static bool ParseFen(const std::string& fen, FenParts& parts);
 
+    void ResetFeedFile();
     void AppendLine(const std::string& line);
+    void LogAppend(const std::string& line) const;
 
     std::string feed_path_;
-    std::vector<std::string> lines_;
     int halfmove_index_ = 0;
     int fmr_ = 0;
     bool open_ = false;
