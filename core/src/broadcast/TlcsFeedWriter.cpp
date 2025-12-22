@@ -1,21 +1,29 @@
 #include "ijccrl/core/broadcast/TlcsFeedWriter.h"
 
-#include "ijccrl/core/util/AtomicFileWriter.h"
-
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 namespace ijccrl::core::broadcast {
 
 namespace {
 
-std::string JoinLines(const std::vector<std::string>& lines) {
+std::string JoinLinesCRLF(const std::vector<std::string>& lines) {
     std::ostringstream out;
     for (const auto& line : lines) {
         out << line << "\r\n";
     }
     return out.str();
+}
+
+void WriteFeedFileInPlace(const std::string& path, const std::string& contents) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        return;
+    }
+    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+    out.flush();
 }
 
 }  // namespace
@@ -113,7 +121,7 @@ void TlcsFeedWriter::Flush() {
         return;
     }
 
-    ijccrl::core::util::AtomicFileWriter::Write(feed_path_, JoinLines(lines_));
+    WriteFeedFileInPlace(feed_path_, JoinLinesCRLF(lines_));
 }
 
 std::string TlcsFeedWriter::StartposFen() {
