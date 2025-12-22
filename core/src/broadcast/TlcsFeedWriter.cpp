@@ -12,6 +12,7 @@ bool TlcsFeedWriter::Open(const std::string& feed_path) {
     feed_path_ = feed_path;
     halfmove_index_ = 0;
     fmr_ = 0;
+    lines_.clear();
     open_ = !feed_path_.empty();
 
     if (!open_) {
@@ -130,19 +131,23 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 }
 
 void TlcsFeedWriter::AppendLine(const std::string& line) {
-    std::ofstream out(feed_path_, std::ios::binary | std::ios::app);
-    if (!out) {
-        return;
-    }
-    out << line << "\r\n";
-    out.flush();
+    lines_.push_back(line);
+    WriteSnapshot();
     LogAppend(line);
 }
 
 void TlcsFeedWriter::ResetFeedFile() {
+    lines_.clear();
+    WriteSnapshot();
+}
+
+void TlcsFeedWriter::WriteSnapshot() {
     std::ofstream out(feed_path_, std::ios::binary | std::ios::trunc);
     if (!out) {
         return;
+    }
+    for (const auto& entry : lines_) {
+        out << entry << "\r\n";
     }
     out.flush();
 }
