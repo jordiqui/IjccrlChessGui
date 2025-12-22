@@ -13,6 +13,7 @@ public:
         std::string server_ini;
         std::string feed_path;
         bool auto_write_server_ini = false;
+        bool force_update_path = true;
     };
 
     bool Configure(const Config& config);

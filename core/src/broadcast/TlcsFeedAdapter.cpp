@@ -2,6 +2,9 @@
 
 #include "ijccrl/core/util/AtomicFileWriter.h"
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -29,6 +32,53 @@ std::string StripQuotes(std::string_view value) {
     return trimmed;
 }
 
+std::string NormalisePathString(std::string value) {
+    std::string trimmed = StripQuotes(value);
+    std::replace(trimmed.begin(), trimmed.end(), '\\', '/');
+    std::filesystem::path path(trimmed);
+    path = path.lexically_normal();
+    try {
+        path = std::filesystem::weakly_canonical(path);
+    } catch (const std::filesystem::filesystem_error&) {
+        // Fall back to lexical normalization when canonicalization is unavailable.
+    }
+    std::string normalised = path.generic_string();
+#ifdef _WIN32
+    std::transform(normalised.begin(), normalised.end(), normalised.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+#endif
+    return normalised;
+}
+
+bool PathsEquivalent(const std::string& left, const std::string& right) {
+    const std::filesystem::path left_path(StripQuotes(left));
+    const std::filesystem::path right_path(StripQuotes(right));
+    std::error_code ec_left;
+    std::error_code ec_right;
+    const bool left_exists = std::filesystem::exists(left_path, ec_left);
+    const bool right_exists = std::filesystem::exists(right_path, ec_right);
+    if (left_exists || right_exists) {
+        std::error_code eq_ec;
+        if (std::filesystem::equivalent(left_path, right_path, eq_ec)) {
+            return true;
+        }
+    }
+    return NormalisePathString(left) == NormalisePathString(right);
+}
+
+std::string NormalisePathForIni(const std::string& value) {
+    std::filesystem::path path(StripQuotes(value));
+    path = path.lexically_normal();
+    try {
+        path = std::filesystem::weakly_canonical(path);
+    } catch (const std::filesystem::filesystem_error&) {
+        // Fall back to lexical normalization when canonicalization is unavailable.
+    }
+    path.make_preferred();
+    return path.string();
+}
+
 }  // namespace
 
 bool TlcsFeedAdapter::Configure(const Config& config) {
@@ -49,17 +99,23 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
         }
 
         if (!ini_path.empty() && ini_path != feed_path_) {
-            if (config.auto_write_server_ini) {
-                if (!UpdateServerIniPath(server_ini_path_, feed_path_)) {
+            if (PathsEquivalent(ini_path, feed_path_)) {
+                std::cerr << "[tlcs] PATH mismatch (ini=" << ini_path << ", cfg=" << feed_path_
+                          << "). Normalised equal -> continuing." << '\n';
+            } else if (config.force_update_path) {
+                const std::string normalised_path = NormalisePathForIni(feed_path_);
+                if (!UpdateServerIniPath(server_ini_path_, normalised_path)) {
                     std::cerr << "[tlcs] Failed to update PATH in server.ini." << '\n';
                     return false;
                 }
+                std::cerr << "[tlcs] PATH mismatch. Updating server.ini PATH -> " << normalised_path << '\n';
             } else {
                 std::cerr << "[tlcs] PATH in server.ini does not match feed_path." << '\n';
                 return false;
             }
         } else if (ini_path.empty() && config.auto_write_server_ini) {
-            if (!UpdateServerIniPath(server_ini_path_, feed_path_)) {
+            const std::string normalised_path = NormalisePathForIni(feed_path_);
+            if (!UpdateServerIniPath(server_ini_path_, normalised_path)) {
                 std::cerr << "[tlcs] Failed to write PATH in server.ini." << '\n';
                 return false;
             }
