@@ -6,7 +6,55 @@
 #include <iostream>
 #include <sstream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace ijccrl::core::broadcast {
+
+namespace {
+
+bool WriteFileContents(const std::string& path, const std::string& contents, bool append) {
+#ifdef _WIN32
+    const std::filesystem::path file_path(path);
+    const DWORD disposition = append ? OPEN_ALWAYS : CREATE_ALWAYS;
+    HANDLE file = CreateFileW(file_path.wstring().c_str(),
+                              GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr,
+                              disposition,
+                              FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    if (append) {
+        SetFilePointer(file, 0, nullptr, FILE_END);
+    }
+    bool ok = true;
+    if (!contents.empty()) {
+        DWORD written = 0;
+        ok = WriteFile(file,
+                       contents.data(),
+                       static_cast<DWORD>(contents.size()),
+                       &written,
+                       nullptr) != 0;
+    }
+    FlushFileBuffers(file);
+    CloseHandle(file);
+    return ok;
+#else
+    std::ofstream out(path, std::ios::binary | (append ? std::ios::app : std::ios::trunc));
+    if (!out) {
+        return false;
+    }
+    out << contents;
+    out.flush();
+    return true;
+#endif
+}
+
+}  // namespace
 
 bool TlcsFeedWriter::Open(const std::string& feed_path, Format format) {
     feed_path_ = feed_path;
@@ -167,12 +215,9 @@ void TlcsFeedWriter::ResetFeedFile() {
 
 void TlcsFeedWriter::AppendWinboardFen(const std::string& fen) {
     const std::string line = "FEN : " + fen + "\r\n";
-    std::ofstream out(feed_path_, std::ios::binary | std::ios::app);
-    if (!out) {
+    if (!WriteFileContents(feed_path_, line, true)) {
         return;
     }
-    out << line;
-    out.flush();
     LogWrite(line.size());
 }
 
@@ -181,16 +226,15 @@ void TlcsFeedWriter::WriteSnapshot() {
         return;
     }
 
-    std::ofstream out(feed_path_, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        return;
-    }
     std::size_t bytes_written = 0;
+    std::ostringstream buffer;
     for (const auto& entry : lines_) {
-        out << entry << "\r\n";
+        buffer << entry << "\r\n";
         bytes_written += entry.size() + 2;
     }
-    out.flush();
+    if (!WriteFileContents(feed_path_, buffer.str(), false)) {
+        return;
+    }
     LogWrite(bytes_written);
 }
 
