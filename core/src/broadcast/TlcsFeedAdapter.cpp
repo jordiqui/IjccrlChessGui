@@ -67,11 +67,36 @@ std::string NormalisePathForIni(const std::string& value) {
     return normalised;
 }
 
+std::string CanonicalPath(const std::string& value) {
+    if (value.empty()) {
+        return {};
+    }
+    std::filesystem::path path(StripQuotes(value));
+    std::error_code ec;
+    const auto resolved = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+        return path.lexically_normal().generic_string();
+    }
+    return resolved.generic_string();
+}
+
+TlcsFeedWriter::Format ParseFormat(std::string_view value) {
+    if (value == "tlcv") {
+        return TlcsFeedWriter::Format::Tlcv;
+    }
+    return TlcsFeedWriter::Format::WinboardDebug;
+}
+
+const char* FormatName(TlcsFeedWriter::Format format) {
+    return format == TlcsFeedWriter::Format::Tlcv ? "tlcv" : "winboard_debug";
+}
+
 }  // namespace
 
 bool TlcsFeedAdapter::Configure(const Config& config) {
     server_ini_path_ = config.server_ini;
     feed_path_ = config.feed_path;
+    const auto format = ParseFormat(config.format);
 
     std::string ini_path;
     std::string ini_site;
@@ -89,6 +114,11 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
         std::cerr << "[tlcs] TLCV feed path is not configured." << '\n';
         return false;
     }
+
+    std::cout << "[tlcs] feed format=" << FormatName(format)
+              << " server_ini_path=" << CanonicalPath(server_ini_path_)
+              << " server_ini_PATH=" << CanonicalPath(ini_path)
+              << " feed_path=" << CanonicalPath(feed_path_) << '\n';
 
     if (!server_ini_path_.empty()) {
         if (!ini_path.empty() && !PathsEquivalent(ini_path, feed_path_)) {
@@ -114,7 +144,7 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
         site_ = ini_site;
     }
 
-    if (!writer_.Open(feed_path_)) {
+    if (!writer_.Open(feed_path_, format)) {
         std::cerr << "[tlcs] Failed to open feed path: " << feed_path_ << '\n';
         return false;
     }

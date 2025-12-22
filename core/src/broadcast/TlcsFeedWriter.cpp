@@ -8,12 +8,14 @@
 
 namespace ijccrl::core::broadcast {
 
-bool TlcsFeedWriter::Open(const std::string& feed_path) {
+bool TlcsFeedWriter::Open(const std::string& feed_path, Format format) {
     feed_path_ = feed_path;
     halfmove_index_ = 0;
     fmr_ = 0;
     lines_.clear();
+    last_fen_.clear();
     open_ = !feed_path_.empty();
+    format_ = format;
 
     if (!open_) {
         return false;
@@ -35,9 +37,14 @@ void TlcsFeedWriter::OnGameStart(const GameInfo& g, const std::string& initial_f
         return;
     }
 
-    ResetFeedFile();
-
     std::string fen_value = initial_fen.empty() ? StartposFen() : initial_fen;
+    last_fen_ = fen_value;
+    if (format_ == Format::WinboardDebug) {
+        AppendWinboardFen(fen_value);
+        return;
+    }
+
+    ResetFeedFile();
     FenParts parts;
     if (!ParseFen(fen_value, parts)) {
         parts = {};
@@ -63,6 +70,14 @@ void TlcsFeedWriter::OnMove(const std::string& uci_move, const std::string& fen_
         return;
     }
 
+    if (format_ == Format::WinboardDebug) {
+        last_fen_ = fen_after_move;
+        if (!last_fen_.empty()) {
+            AppendWinboardFen(last_fen_);
+        }
+        return;
+    }
+
     const bool white_to_move = (halfmove_index_ % 2 == 0);
     const int move_number = halfmove_index_ / 2 + 1;
     const std::string move_label =
@@ -73,6 +88,7 @@ void TlcsFeedWriter::OnMove(const std::string& uci_move, const std::string& fen_
 
     FenParts parts;
     if (ParseFen(fen_after_move, parts)) {
+        last_fen_ = fen_after_move;
         fmr_ = parts.halfmove;
         AppendLine("FMR " + std::to_string(fmr_));
         AppendLine("FEN " + FormatFenPrefix(parts));
@@ -84,8 +100,17 @@ void TlcsFeedWriter::OnGameEnd(const GameResult& r, const std::string& final_fen
         return;
     }
 
+    if (format_ == Format::WinboardDebug) {
+        last_fen_ = final_fen;
+        if (!last_fen_.empty()) {
+            AppendWinboardFen(last_fen_);
+        }
+        return;
+    }
+
     FenParts parts;
     if (ParseFen(final_fen, parts)) {
+        last_fen_ = final_fen;
         fmr_ = parts.halfmove;
         AppendLine("FMR " + std::to_string(fmr_));
         AppendLine("FEN " + FormatFenPrefix(parts));
@@ -133,7 +158,6 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 void TlcsFeedWriter::AppendLine(const std::string& line) {
     lines_.push_back(line);
     WriteSnapshot();
-    LogAppend(line);
 }
 
 void TlcsFeedWriter::ResetFeedFile() {
@@ -141,23 +165,41 @@ void TlcsFeedWriter::ResetFeedFile() {
     WriteSnapshot();
 }
 
+void TlcsFeedWriter::AppendWinboardFen(const std::string& fen) {
+    const std::string line = "FEN : " + fen + "\r\n";
+    std::ofstream out(feed_path_, std::ios::binary | std::ios::app);
+    if (!out) {
+        return;
+    }
+    out << line;
+    out.flush();
+    LogWrite(line.size());
+}
+
 void TlcsFeedWriter::WriteSnapshot() {
+    if (format_ != Format::Tlcv) {
+        return;
+    }
+
     std::ofstream out(feed_path_, std::ios::binary | std::ios::trunc);
     if (!out) {
         return;
     }
+    std::size_t bytes_written = 0;
     for (const auto& entry : lines_) {
         out << entry << "\r\n";
+        bytes_written += entry.size() + 2;
     }
     out.flush();
+    LogWrite(bytes_written);
 }
 
-void TlcsFeedWriter::LogAppend(const std::string& line) const {
+void TlcsFeedWriter::LogWrite(std::size_t bytes_written) const {
     std::error_code ec;
     const auto size = std::filesystem::file_size(feed_path_, ec);
     const auto reported_size = ec ? 0U : size;
-    std::cout << "[tlcs] Append: " << line << "\\r\\n"
-              << " (feed_size=" << reported_size << ")" << '\n';
+    std::cout << "[tlcs] Write bytes=" << bytes_written << " feed_size=" << reported_size
+              << " last_fen=\"" << last_fen_ << "\"" << '\n';
 }
 
 }  // namespace ijccrl::core::broadcast

@@ -191,6 +191,7 @@ int main(int argc, char** argv) {
         ijccrl::core::broadcast::TlcsFeedAdapter::Config tlcs_config;
         tlcs_config.server_ini = runner_config.broadcast.tlcs.server_ini;
         tlcs_config.feed_path = runner_config.broadcast.tlcs.feed_path;
+        tlcs_config.format = runner_config.broadcast.tlcs.format;
         tlcs_config.auto_write_server_ini = runner_config.broadcast.tlcs.auto_write_server_ini;
         auto tlcs = std::make_unique<ijccrl::core::broadcast::TlcsFeedAdapter>();
         if (!tlcs->Configure(tlcs_config)) {
