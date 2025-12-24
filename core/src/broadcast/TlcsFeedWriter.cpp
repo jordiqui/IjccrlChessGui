@@ -14,6 +14,10 @@ namespace ijccrl::core::broadcast {
 
 namespace {
 
+const char* FormatName(TlcsFeedWriter::Format format) {
+    return format == TlcsFeedWriter::Format::Tlcv ? "tlcv" : "winboard_debug";
+}
+
 bool WriteFileContents(const std::string& path, const std::string& contents, bool append) {
 #ifdef _WIN32
     const std::filesystem::path file_path(path);
@@ -204,12 +208,26 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 }
 
 void TlcsFeedWriter::AppendLine(const std::string& line) {
+    if (format_ == Format::Tlcv) {
+        const std::string content = line + "\r\n";
+        if (!WriteFileContents(feed_path_, content, true)) {
+            return;
+        }
+        LogWrite(content.size());
+        return;
+    }
+
     lines_.push_back(line);
     WriteSnapshot();
 }
 
 void TlcsFeedWriter::ResetFeedFile() {
     lines_.clear();
+    if (format_ == Format::Tlcv) {
+        EnsureTrailingNewline();
+        return;
+    }
+
     WriteSnapshot();
 }
 
@@ -225,24 +243,38 @@ void TlcsFeedWriter::WriteSnapshot() {
     if (format_ != Format::Tlcv) {
         return;
     }
+}
 
-    std::size_t bytes_written = 0;
-    std::ostringstream buffer;
-    for (const auto& entry : lines_) {
-        buffer << entry << "\r\n";
-        bytes_written += entry.size() + 2;
-    }
-    if (!WriteFileContents(feed_path_, buffer.str(), false)) {
+void TlcsFeedWriter::EnsureTrailingNewline() {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(feed_path_, ec);
+    if (ec || size == 0) {
         return;
     }
-    LogWrite(bytes_written);
+
+    std::ifstream in(feed_path_, std::ios::binary);
+    if (!in) {
+        return;
+    }
+
+    const auto bytes_to_read = static_cast<std::size_t>(std::min<std::uintmax_t>(2, size));
+    in.seekg(-static_cast<std::streamoff>(bytes_to_read), std::ios::end);
+    std::string tail(bytes_to_read, '\0');
+    in.read(tail.data(), static_cast<std::streamsize>(bytes_to_read));
+
+    if (tail.size() >= 2 && tail[tail.size() - 2] == '\r' && tail[tail.size() - 1] == '\n') {
+        return;
+    }
+
+    WriteFileContents(feed_path_, "\r\n", true);
 }
 
 void TlcsFeedWriter::LogWrite(std::size_t bytes_written) const {
     std::error_code ec;
     const auto size = std::filesystem::file_size(feed_path_, ec);
     const auto reported_size = ec ? 0U : size;
-    std::cout << "[tlcs] Write bytes=" << bytes_written << " feed_size=" << reported_size
+    std::cout << "[tlcs] Write format=" << FormatName(format_) << " bytes=" << bytes_written
+              << " feed_size=" << reported_size
               << " last_fen=\"" << last_fen_ << "\"" << '\n';
 }
 
