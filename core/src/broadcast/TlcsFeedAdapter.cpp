@@ -130,10 +130,9 @@ bool TlcsFeedAdapter::Configure(const Config& config) {
                 }
                 std::cerr << "[tlcs] PATH mismatch. Updating server.ini PATH -> " << normalised_path << '\n';
             } else {
-                std::cerr << "[tlcs] PATH in server.ini does not match feed_path." << '\n';
-                return false;
+                std::cerr << "[tlcs] PATH in server.ini does not match feed_path. force_update_path=false, not updating." << '\n';
             }
-        } else if (ini_path.empty() && config.auto_write_server_ini) {
+        } else if (ini_path.empty() && config.auto_write_server_ini && config.force_update_path) {
             const std::string normalised_path = NormalisePathForIni(feed_path_);
             if (!UpdateServerIniPath(server_ini_path_, normalised_path)) {
                 std::cerr << "[tlcs] Failed to write PATH in server.ini." << '\n';

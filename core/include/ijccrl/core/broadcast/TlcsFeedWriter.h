@@ -55,6 +55,7 @@ private:
     void AppendLine(const std::string& line);
     void AppendWinboardFen(const std::string& fen);
     void WriteSnapshot();
+    void EnsureTrailingNewline();
     void LogWrite(std::size_t bytes_written) const;
 
     std::string feed_path_;
