@@ -208,26 +208,12 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 }
 
 void TlcsFeedWriter::AppendLine(const std::string& line) {
-    if (format_ == Format::Tlcv) {
-        const std::string content = line + "\r\n";
-        if (!WriteFileContents(feed_path_, content, true)) {
-            return;
-        }
-        LogWrite(content.size());
-        return;
-    }
-
     lines_.push_back(line);
     WriteSnapshot();
 }
 
 void TlcsFeedWriter::ResetFeedFile() {
     lines_.clear();
-    if (format_ == Format::Tlcv) {
-        EnsureTrailingNewline();
-        return;
-    }
-
     WriteSnapshot();
 }
 
@@ -243,6 +229,18 @@ void TlcsFeedWriter::WriteSnapshot() {
     if (format_ != Format::Tlcv) {
         return;
     }
+
+    std::string content;
+    for (const auto& line : lines_) {
+        content.append(line);
+        content.append("\r\n");
+    }
+
+    if (!WriteFileContents(feed_path_, content, false)) {
+        return;
+    }
+
+    LogWrite(content.size());
 }
 
 void TlcsFeedWriter::EnsureTrailingNewline() {
