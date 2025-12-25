@@ -18,6 +18,19 @@ const char* FormatName(TlcsFeedWriter::Format format) {
     return format == TlcsFeedWriter::Format::Tlcv ? "tlcv" : "winboard_debug";
 }
 
+std::string ToAscii(const std::string& input) {
+    std::string ascii;
+    ascii.reserve(input.size());
+    for (unsigned char ch : input) {
+        if (ch <= 0x7F) {
+            ascii.push_back(static_cast<char>(ch));
+        } else {
+            ascii.push_back('?');
+        }
+    }
+    return ascii;
+}
+
 bool WriteFileContents(const std::string& path, const std::string& contents, bool append) {
 #ifdef _WIN32
     const std::filesystem::path file_path(path);
@@ -52,9 +65,10 @@ bool WriteFileContents(const std::string& path, const std::string& contents, boo
     if (!out) {
         return false;
     }
-    out << contents;
+    out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
     out.flush();
-    return true;
+    out.close();
+    return out.good();
 #endif
 }
 
@@ -208,7 +222,7 @@ bool TlcsFeedWriter::ParseFen(const std::string& fen, FenParts& parts) {
 }
 
 void TlcsFeedWriter::AppendLine(const std::string& line) {
-    lines_.push_back(line);
+    lines_.push_back(ToAscii(line));
     WriteSnapshot();
 }
 
@@ -233,6 +247,12 @@ void TlcsFeedWriter::WriteSnapshot() {
     std::string content;
     for (const auto& line : lines_) {
         content.append(line);
+        content.append("\r\n");
+    }
+
+    const bool has_trailing_crlf = content.size() >= 2 && content[content.size() - 2] == '\r' &&
+                                    content[content.size() - 1] == '\n';
+    if (!has_trailing_crlf) {
         content.append("\r\n");
     }
 

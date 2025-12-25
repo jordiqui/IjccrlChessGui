@@ -3,6 +3,17 @@
 This document describes the exact TLCS feed file format that `node-tlcv` parses and that
 IjccrlChessGui emits when `broadcast.adapter = "tlcs_feed"`.
 
+## TLCS compatibility hard rules
+
+When emitting the `tlcv` feed, the writer obeys the following TLCS-specific requirements:
+
+1. Every update performs a **full snapshot rewrite** of the feed file (truncate + write all
+   lines) using ASCII text, `\r\n` line endings, and a trailing `\r\n` after the last line.
+2. The feed file is rewritten **in place**. Atomic renames or temp-file swaps are avoided so
+   TLCS always observes updates on the same path.
+3. After each write, the file handle is flushed and closed; no handles are kept open between
+   updates.
+
 ## Parser reference (node-tlcv)
 
 The `node-tlcv` server listens for TLCS/TLCV UDP packets and parses each line with:
